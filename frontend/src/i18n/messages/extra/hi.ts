@@ -57,6 +57,8 @@ const hi: Record<string, string> = {
   "pkg.day": "दिन {n}",
   "pkg.checkIn": "चेक इन",
   "pkg.checkOut": "चेक आउट {date}",
+  "pkg.refundable": "मुफ़्त कैंसलेशन",
+  "pkg.nonRefundable": "नॉन-रिफ़ंडेबल",
   "pkg.lands": "उतरेगी {date} {time}",
   "pkg.changeHotelIn": "{city} में होटल बदलें",
   "pkg.otherHotels": "{city} में दूसरे होटल",

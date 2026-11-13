@@ -5,7 +5,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { calendarFileName, tripCalendar } from "../lib/calendar";
 import { messageFrom } from "../lib/errors";
 import { eachDay, inr, nightsBetween } from "../lib/format";
-import { IST, istOf, legBetween, localZone, toIst } from "../lib/travel";
+import { IST, istOf, legBetween, legFromHotel, legToHotel, localZone, toIst, type Leg } from "../lib/travel";
 import BudgetBar from "./BudgetBar";
 import ChangeOptions, { CityPlanOptions, type ChangeReport, type OptionKind } from "./ChangeOptions";
 import CityRoute from "./CityRoute";
@@ -383,6 +383,31 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
             const to = places[v.catalog_id ?? ""];
             return !!(before?.end && from && to && legBetween(from, to, before.end, v.start).tight);
           });
+          // Leaving that night's hotel for the first visit, and going back after the last (display only).
+          const nightHotel = items.find((i) => i.type === "hotel" && i.end && i.start <= day.date && day.date < i.end);
+          const hotelAt = nightHotel && places[nightHotel.catalog_id ?? ""];
+          const firstVisit = dayVisits[0];
+          const lastVisit = dayVisits[dayVisits.length - 1];
+          const reachHotel = day.items.find(
+            (i) => i.type === "transfer" && (i.role === "arrival_transfer" || i.role === "intercity_transfer") && i.end?.slice(0, 10) === day.date,
+          )?.end ?? undefined;
+          const firstAt = firstVisit && places[firstVisit.catalog_id ?? ""];
+          const lastAt = lastVisit && places[lastVisit.catalog_id ?? ""];
+          const outLeg = hotelAt && firstAt ? legFromHotel(hotelAt, firstAt, firstVisit.start, reachHotel) : null;
+          const backLeg = hotelAt && lastAt && lastVisit.end ? legToHotel(lastAt, hotelAt, lastVisit.end) : null;
+          const legRow = (key: string, leg: Leg, label: string | null, tight: string | null) => (
+            <li key={key} className={`leg${label ? " leg--hotel" : ""}`} role="note">
+              <Icon name="route" className="leg__icon" />
+              <span className="leg__text">
+                {label && <span className="leg__place">{label}</span>}
+                <span className="leg__travel">{t("pkg.legTravel", { time: duration(leg.minutes), km: leg.km.toFixed(1) })}</span>
+                <span className="leg__times">
+                  {t("pkg.legTimes", { leave: toIst(leg.leave, zone.offset), arrive: toIst(leg.arrive, zone.offset) })}
+                </span>
+                {tight && <span className="leg__tight">{tight}</span>}
+              </span>
+            </li>
+          );
           return (
             <section key={day.date} className="day" aria-labelledby={headingId}>
               <div className="day__head">
@@ -425,18 +450,10 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
                     const hotelNights = item.type === "hotel" && item.end ? nightsBetween(item.start, item.end) : 0;
                     return (
                       <Fragment key={item.item_id}>
-                      {leg && (
-                        <li className="leg" role="note">
-                          <Icon name="route" className="leg__icon" />
-                          <span className="leg__text">
-                            <span className="leg__travel">{t("pkg.legTravel", { time: duration(leg.minutes), km: leg.km.toFixed(1) })}</span>
-                            <span className="leg__times">
-                              {t("pkg.legTimes", { leave: toIst(leg.leave, zone.offset), arrive: toIst(leg.arrive, zone.offset) })}
-                            </span>
-                            {leg.tight && start && <span className="leg__tight">{t("pkg.legTight", { time: start })}</span>}
-                          </span>
-                        </li>
-                      )}
+                      {outLeg && item === firstVisit &&
+                        legRow("out", outLeg, t("pkg.leaveHotel", { hotel: nightHotel!.name }),
+                          outLeg.tight && reachHotel ? t("pkg.hotelTight", { time: toIst(reachHotel.slice(11, 16), zone.offset) }) : null)}
+                      {leg && legRow("leg", leg, null, leg.tight && start ? t("pkg.legTight", { time: start }) : null)}
                       <li
                         className={`item item--${item.type}${draggable ? " item--draggable" : ""}${dragging === item.item_id ? " item--dragging" : ""}${dropOn === item.item_id && dragging !== item.item_id ? " item--drop" : ""}`}
                         draggable={draggable || undefined}
@@ -498,6 +515,9 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
                                 ? `${count("seat", item.quantity)}${endsOtherDay ? ` · ${t("pkg.lands", { date: shortDate(to_!.date), time: end ?? "" })}` : ""}`
                                 : place(item.city)}
                           </span>
+                          {item.type === "hotel" && item.refundable !== undefined && (
+                            <span className="item__refund">{item.refundable ? t("pkg.refundable") : t("pkg.nonRefundable")}</span>
+                          )}
                           {item.warnings?.map((w) => (
                             <span key={w} className="item__warn">
                               <Icon name="warning" /> {ts(w)}
@@ -526,6 +546,7 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
                           )}
                         </div>
                       </li>
+                      {backLeg && item === lastVisit && legRow("back", backLeg, t("pkg.backToHotel", { hotel: nightHotel!.name }), null)}
                       </Fragment>
                     );
                   })}

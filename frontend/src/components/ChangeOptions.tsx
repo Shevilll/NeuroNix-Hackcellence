@@ -144,6 +144,7 @@ export default function ChangeOptions({ id, reservation, pkg, kind, params, date
                   {o.area && <span>{o.area}</span>}
                   {o.rating !== undefined && <span>{t("opt.rating", { n: o.rating })}</span>}
                   {o.rooms !== undefined && <span>{count("room", o.rooms)}</span>}
+                  {o.refundable !== undefined && <span>{o.refundable ? t("pkg.refundable") : t("pkg.nonRefundable")}</span>}
                   {o.depart && <FlightTime label="opt.departs" iso={o.depart} offset={params.role === "arrival_flight" ? IST : zone} />}
                   {o.arrive && <FlightTime label="opt.lands" iso={o.arrive} offset={params.role === "arrival_flight" ? zone : IST} />}
                 </span>

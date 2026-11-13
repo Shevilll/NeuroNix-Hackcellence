@@ -65,6 +65,8 @@ const en: Record<string, string> = {
   "pkg.day": "Day {n}",
   "pkg.checkIn": "Check in",
   "pkg.checkOut": "check out {date}",
+  "pkg.refundable": "Free cancellation",
+  "pkg.nonRefundable": "Non-refundable",
   "pkg.lands": "lands {date} {time}",
   "pkg.changeHotelIn": "Change hotel in {city}",
   "pkg.otherHotels": "Other hotels in {city}",

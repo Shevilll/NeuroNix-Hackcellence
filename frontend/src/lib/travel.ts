@@ -75,6 +75,28 @@ export function legBetween(from: Place, to: Place, fromEnd: string, nextStart: s
   };
 }
 
+/**
+ * Leaving the hotel to reach the day's first visit as it starts (`visitStart`). It is tight when that
+ * means leaving before the traveller reaches the hotel that day (`reachHotel`, e.g. the airport bus).
+ */
+export function legFromHotel(hotel: Place, visit: Place, visitStart: string, reachHotel?: string): Leg {
+  const km = distanceKm(hotel, visit);
+  const minutes = travelMinutes(km);
+  const arrive = minutesOf(visitStart.slice(11, 16));
+  return {
+    km: Math.round(km * 10) / 10,
+    minutes,
+    leave: clock(arrive - minutes),
+    arrive: clock(arrive),
+    tight: !!reachHotel && arrive - minutes < minutesOf(reachHotel.slice(11, 16)),
+  };
+}
+
+/** Going back to the hotel when the day's last visit ends (`visitEnd`). */
+export function legToHotel(visit: Place, hotel: Place, visitEnd: string): Leg {
+  return { ...legBetween(visit, hotel, visitEnd, visitEnd), tight: false };
+}
+
 export const IST = IST_OFFSET;
 
 /**

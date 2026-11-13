@@ -29,6 +29,8 @@ export interface TripItem {
   catalog_id?: string;
   role?: string | null;
   warnings?: string[];
+  /** Hotels: the room is free to cancel (rooms.refundable, display only). Missing on older packages. */
+  refundable?: boolean;
 }
 
 export interface Traveler {
@@ -146,6 +148,7 @@ export interface ChangeOption {
   rating?: number;
   area?: string | null;
   rooms?: number;
+  refundable?: boolean;
   flight_id?: string;
   depart?: string;
   arrive?: string;

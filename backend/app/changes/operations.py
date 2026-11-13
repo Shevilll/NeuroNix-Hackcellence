@@ -102,7 +102,7 @@ def _replace_hotel(pkg, catalog, request, change):
     if k is None:
         raise ChangeRefused("That room type cannot fit your party.")
     item.update(name=hotel.name, catalog_id=hotel.hotel_id, room_id=room.room_id, quantity=k,
-                price_inr=pricing.hotel_cost(room.price_per_night, k, nights))
+                price_inr=pricing.hotel_cost(room.price_per_night, k, nights), refundable=room.refundable)
     _refit_airport_transfers(pkg, catalog, request)
 
 
@@ -364,6 +364,7 @@ def list_options(package: dict[str, Any], catalog: Catalog, kind: str, **filters
                 continue
             out.append({"hotel_id": hotel.hotel_id, "room_id": room.room_id, "name": f"{hotel.name} · {room.name}", "hotel_name": hotel.name,
                         "stars": hotel.stars, "rating": hotel.rating, "area": hotel.area, "rooms": k,
+                        "refundable": room.refundable,
                         "price": cost, "price_diff": new["total_inr"] - package["total_inr"]})
     elif kind == "flights":
         role = filters["role"]

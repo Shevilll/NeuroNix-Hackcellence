@@ -259,6 +259,7 @@ def _assemble(request, catalog, order, split, arrival, ret, stays, changes, visi
     for city, first_night, nights, (cost, hotel, room, k) in stays:
         add("hotel", hotel.name, city, hotel.hotel_id, first_night.isoformat(),
             (first_night + timedelta(days=nights)).isoformat(), k, cost, room=room.room_id)
+        items[-1]["refundable"] = room.refundable  # free cancellation, display only
     for (a_city, b_city), (tcost, t, pickup) in changes:
         qty = pricing.vehicles_needed(request.travelers, t.max_passengers) if t.pricing == "PER_VEHICLE" else request.travelers
         add("transfer", t.name, b_city, t.transfer_id, _iso(pickup), _iso(pickup + timedelta(minutes=t.duration_minutes)),

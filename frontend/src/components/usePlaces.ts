@@ -4,7 +4,7 @@ import type { Place } from "../lib/travel";
 
 let cache: Record<string, Place> | null = null;
 
-/** attraction id -> latitude and longitude. Loaded once; without it the plan shows no travel times. */
+/** attraction or hotel id -> latitude and longitude. Loaded once; without it the plan shows no travel times. */
 export function usePlaces(): Record<string, Place> {
   const [places, setPlaces] = useState<Record<string, Place>>(cache ?? {});
   useEffect(() => {
