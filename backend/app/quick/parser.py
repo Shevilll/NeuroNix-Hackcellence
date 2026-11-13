@@ -137,6 +137,15 @@ def _children(text: str) -> tuple[list[int] | None, bool, str]:
     return (ages or None), True, text
 
 
+def _children_count(text: str) -> int | None:
+    """How many children were named ("2 children", "a child"), for when their ages are not given."""
+    m = re.search(r"\b(" + _NUM + r"|a|an)\s+(?:little\s+|young\s+|small\s+)?" + CHILD_WORDS + r"\b", text, re.I)
+    if not m:
+        return None
+    n = m.group(1).lower()
+    return 1 if n in ("a", "an") else _num(n)
+
+
 def _adults(text: str) -> int | None:
     m = re.search(r"\b" + _NUM + r"\s+adults?\b", text, re.I)
     if m:
@@ -180,6 +189,8 @@ def parse_quick_request(text: str, catalog: Catalog) -> dict[str, Any]:
         fields["children_ages"] = ages
     elif kids_mentioned:
         unclear.append("children_ages")
+        if (count := _children_count(rest)):
+            fields["children_count"] = count
     elif adults is not None:
         fields["children_ages"] = []
 

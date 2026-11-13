@@ -1,5 +1,5 @@
 import { api, ApiError, newIdempotencyKey } from "./client";
-import type { TripOptions, TripRequest } from "./types";
+import type { TripOptions, TripPrefill, TripRequest } from "./types";
 
 export async function getOptions(): Promise<TripOptions> {
   return (await api.request<TripOptions>("/api/options")).data;
@@ -190,7 +190,7 @@ export async function getPackage(id: string) {
 }
 
 export interface QuickResult {
-  fields: Partial<TripRequest>;
+  fields: TripPrefill;
   missing: string[];
   unclear: string[];
 }

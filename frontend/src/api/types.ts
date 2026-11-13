@@ -30,3 +30,6 @@ export interface TripRequest {
   children_ages: number[];
   budget: number;
 }
+
+/** Request fields that fill the form. A quick request may name how many children without their ages. */
+export type TripPrefill = Partial<TripRequest> & { children_count?: number };

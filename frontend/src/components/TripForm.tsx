@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import type { TripOptions, TripRequest } from "../api/types";
+import type { TripOptions, TripPrefill, TripRequest } from "../api/types";
 import {
   formatLongDate,
   toRequest,
@@ -30,7 +30,7 @@ interface Props {
   busy?: boolean;
   serverError?: string | null;
   /** Fields read from a quick request. A new object replaces what the form shows for those fields. */
-  prefill?: Partial<TripRequest> | null;
+  prefill?: TripPrefill | null;
 }
 
 type ErrorKey = keyof FormErrors;
@@ -45,7 +45,10 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
   useEffect(() => {
     if (!prefill) return;
     const country = options.countries.find((c) => c.name === prefill.country || c.code === prefill.country);
-    const ages = prefill.children_ages;
+    // Ages win; with only a count, show one empty age box per child so the traveler fills them in.
+    const count = prefill.children_count;
+    const ages: (number | string)[] | undefined =
+      prefill.children_ages ?? (count !== undefined ? Array.from({ length: Math.min(count, rules.max_travelers) }, () => "") : undefined);
     setValues((v) => ({
       ...v,
       ...(prefill.origin ? { origin: prefill.origin } : {}),

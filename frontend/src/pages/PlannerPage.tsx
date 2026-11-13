@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { newIdempotencyKey } from "../api/client";
 import { build, confirmPackage, getOptions, getPackage, type BuildResult, type TripPackage } from "../api/endpoints";
-import type { TripOptions, TripRequest } from "../api/types";
+import type { TripOptions, TripPrefill, TripRequest } from "../api/types";
 import Hero from "../components/Hero";
 import Icon from "../components/Icon";
 import NoPackageNotice from "../components/NoPackageNotice";
@@ -72,7 +72,7 @@ export default function PlannerPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [result, setResult] = useState<BuildResult | null>(saved?.result ?? null);
   const [lastRequest, setLastRequest] = useState<TripRequest | null>(saved?.request ?? null);
-  const [prefill, setPrefill] = useState<Partial<TripRequest> | null>(saved?.request ?? null);
+  const [prefill, setPrefill] = useState<TripPrefill | null>(saved?.request ?? null);
   const [pick, setPick] = useState(saved?.pick ?? "recommended");
   const [reservation, setReservation] = useState<{ number: string; pkg: TripPackage } | null>(saved?.reservation ?? null);
   const [confirming, setConfirming] = useState(false);
