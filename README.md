@@ -38,22 +38,35 @@ while keeping every rule true, and books it under a 10-digit reservation number.
 
 **Requirements:** Python 3.12+, Node.js 20+, npm.
 
+macOS / Linux:
+
 ```bash
 ./scripts/setup.sh    # once: Python venv + backend deps, frontend deps
 ./scripts/start.sh    # backend on :8000 and frontend on :5173
 ```
 
+Windows (PowerShell):
+
+```powershell
+.\scripts\setup.ps1   # once: Python venv + backend deps, frontend deps
+.\scripts\start.ps1   # backend on :8000 and frontend on :5173
+```
+
+If PowerShell blocks the scripts, allow them for this session first:
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+
 Then open **http://localhost:5173**. The first start creates the database; nothing else is needed.
 
 If a port is taken, choose others: `BACKEND_PORT=8010 FRONTEND_PORT=5180 ./scripts/start.sh` (the frontend
 is pointed at the chosen backend port automatically, and the frontend refuses to start on a busy port
-with a clear error instead of silently picking another one).
+with a clear error instead of silently picking another one). On Windows PowerShell:
+`$env:BACKEND_PORT=8010; $env:FRONTEND_PORT=5180; .\scripts\start.ps1`.
 
 | Command | What it does |
 |---|---|
-| `./scripts/setup.sh` | Creates `backend/.venv`, installs the backend, runs `npm ci` in `frontend/` |
-| `./scripts/start.sh` | Starts the FastAPI backend (`uvicorn`) and the Vite frontend together |
-| `cd backend && .venv/bin/pytest` | Runs the backend test suite |
+| `./scripts/setup.sh` (Windows: `.\scripts\setup.ps1`) | Creates `backend/.venv`, installs the backend, runs `npm ci` in `frontend/` |
+| `./scripts/start.sh` (Windows: `.\scripts\start.ps1`) | Starts the FastAPI backend (`uvicorn`) and the Vite frontend together |
+| `cd backend && .venv/bin/pytest` (Windows: `.venv\Scripts\pytest`) | Runs the backend test suite |
 | `cd frontend && npm test` | Runs the frontend test suite |
 
 The database is a single SQLite file at `backend/var/holiday.db`. It is created on first start. Delete
@@ -396,7 +409,7 @@ NeuroNix-Hackcellence/
 ├── README.md
 ├── data/                      # organiser data, unchanged
 ├── images/                    # organiser photos + ATTRIBUTIONS.md
-├── scripts/                   # setup.sh, start.sh
+├── scripts/                   # setup.sh/.ps1, start.sh/.ps1
 ├── backend/
 │   ├── app/
 │   │   ├── api/               # thin FastAPI routers: options, packages, quick, check, images
