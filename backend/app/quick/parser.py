@@ -121,9 +121,14 @@ def _country(text: str, catalog: Catalog) -> str | None:
 
 def _children(text: str) -> tuple[list[int] | None, bool, str]:
     """Returns (ages, mentioned, text). ages is None when children are mentioned without ages."""
-    if not re.search(r"\b" + CHILD_WORDS + r"\b", text, re.I):
-        return None, False, text
     ages: list[int] = []
+    for m in list(re.finditer(r"\b(\d{1,2})\s*-?\s*(?:years?|yrs?|y)\s*-?\s*(?:old|olds)\b|\b(\d{1,2})\s*(?:years?|yrs?)\b(?!\s*old)(?=[\s,.]|$)", text, re.I)):
+        age = int(m.group(1) or m.group(2))
+        if age <= 17 and (m.group(1) or re.search(r"\b" + CHILD_WORDS + r"\b", text, re.I)):
+            ages.append(age)
+            text = _cut(text, m.span())
+    if not re.search(r"\b" + CHILD_WORDS + r"\b", text, re.I):
+        return (ages or None), bool(ages), text
     for m in re.finditer(r"\b" + CHILD_WORDS + r"\b[\s,]*(?:aged?|of|who are|is|are)?[\s:,]*"
                          r"(\d{1,2}(?:\s*(?:,|and|&)\s*\d{1,2})*)\b(?!\s*(?:nights?|days?|adults?|lakhs?|k\b|l\b))",
                          text, re.I):
