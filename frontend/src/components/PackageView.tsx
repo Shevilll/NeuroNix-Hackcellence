@@ -9,6 +9,7 @@ import BudgetBar from "./BudgetBar";
 import ChangeOptions, { CityPlanOptions, type ChangeReport, type OptionKind } from "./ChangeOptions";
 import CityRoute from "./CityRoute";
 import Icon, { ItemIcon } from "./Icon";
+import RouteMap from "./RouteMap";
 import RuleChecklist from "./RuleChecklist";
 import Spinner from "./Spinner";
 import { usePhotos } from "./usePhotos";
@@ -207,6 +208,8 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
           </div>
         )}
       </header>
+
+      <RouteMap pkg={pkg} />
 
       <aside className="pkg__aside">
         <div className="card summary">

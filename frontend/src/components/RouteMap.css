@@ -1,0 +1,222 @@
+/* The route map on the package page. Colours come from tokens.css only. */
+.route-map {
+  display: grid;
+  gap: 16px;
+}
+
+.route-map__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text);
+}
+.route-map__title .icon {
+  width: 22px;
+  height: 22px;
+  color: var(--blue-600);
+}
+
+.route-map__days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.route-map__day {
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.route-map__day:hover {
+  border-color: var(--blue-600);
+  color: var(--blue-600);
+}
+.route-map__day[aria-pressed="true"] {
+  background: var(--blue-900);
+  border-color: var(--blue-900);
+  color: var(--on-primary);
+}
+.route-map__day:focus-visible {
+  outline: 2px solid var(--blue-600);
+  outline-offset: 2px;
+}
+
+.route-map__body {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 16px;
+}
+
+/* Leaflet's panes sit at z-index 400+; keep them under the page's own menus and dialogs. */
+.route-map__canvas {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+  min-height: 420px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--blue-50);
+}
+
+.route-map__side {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+.route-map__stops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 380px;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+}
+.route-map__stop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.route-map__stop:last-child {
+  border-bottom: 0;
+}
+.route-map__stop-text {
+  display: grid;
+  min-width: 0;
+}
+.route-map__stop-name {
+  color: var(--text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.route-map__stop-kind {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+/* Pins: on the map (Leaflet divIcon) and in the list. */
+.route-map__pin {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+  box-sizing: border-box;
+}
+.route-map__pin .icon {
+  width: 15px;
+  height: 15px;
+}
+.route-map__pin--airport {
+  background: var(--blue-900);
+  color: var(--on-primary);
+}
+.route-map__pin--hotel {
+  background: var(--surface);
+  color: var(--blue-900);
+  border: 2px solid var(--blue-900);
+}
+.route-map__pin--attraction {
+  background: var(--blue-600);
+  color: var(--on-primary);
+  border: 2px solid var(--surface);
+}
+
+/* Legs: CSS beats the stroke Leaflet writes on the path. */
+.route-map__leg {
+  stroke: var(--blue-600);
+  stroke-width: 3;
+  stroke-opacity: 0.85;
+  fill: none;
+}
+.route-map__leg--flight {
+  stroke: var(--blue-900);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+}
+
+.route-map__key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+.route-map__swatch {
+  display: inline-block;
+  width: 24px;
+  border-top: 3px solid var(--blue-600);
+}
+.route-map__swatch--flight {
+  margin-left: 8px;
+  border-top: 2px dashed var(--blue-900);
+}
+
+/* Leaflet's own controls, in the app's colours. */
+.route-map .leaflet-container {
+  font: inherit;
+  background: var(--blue-50);
+}
+.route-map .leaflet-bar a {
+  background: var(--surface);
+  color: var(--text);
+  border-bottom-color: var(--border);
+}
+.route-map .leaflet-bar a:hover {
+  background: var(--blue-100);
+}
+.route-map .leaflet-control-attribution {
+  background: var(--backdrop-wash-strong);
+  color: var(--text-muted);
+}
+.route-map .leaflet-control-attribution a {
+  color: var(--blue-600);
+}
+.route-map .leaflet-tooltip {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 760px) {
+  .route-map__body {
+    grid-template-columns: 1fr;
+  }
+  .route-map__canvas {
+    min-height: 300px;
+  }
+  .route-map__stops {
+    max-height: none;
+  }
+}
+
+/* On a wide screen the map spans the package page between its header and the days. */
+@media (min-width: 960px) {
+  .pkg:has(> .route-map) {
+    grid-template-areas:
+      "head head"
+      "map map"
+      "days aside";
+  }
+  .pkg > .route-map {
+    grid-area: map;
+  }
+}
