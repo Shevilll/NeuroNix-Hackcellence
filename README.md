@@ -1,0 +1,424 @@
+# Build My Holiday — NeuroNix
+
+> Booking Holdings · Hackcellence Intern Hackathon · **Problem 1: Holiday Package**
+
+A web app that builds a complete, rule-correct holiday package (flights, hotels, airport transfers,
+transfers between cities, and attractions) from a short trip request, lets the traveler change it
+while keeping every rule true, and books it under a 10-digit reservation number.
+
+**Team NeuroNix**
+
+| Member | Email |
+|---|---|
+| Ahmad Faraz | ahmadfaraz00710@gmail.com |
+| Huzaifa Kamaal Khan | huzaifakamaalkhan@gmail.com |
+
+---
+
+## Contents
+
+1. [Quick start](#1-quick-start)
+2. [What the app does](#2-what-the-app-does)
+3. [Feature status](#3-feature-status)
+4. [Architecture](#4-architecture)
+5. [Our city rule](#5-our-city-rule)
+6. [How a package is built](#6-how-a-package-is-built)
+7. [Rule checking](#7-rule-checking)
+8. [Idempotency, retries and persistence](#8-idempotency-retries-and-persistence)
+9. [API reference](#9-api-reference)
+10. [Package export (JSON)](#10-package-export-json)
+11. [Testing](#11-testing)
+12. [Project structure](#12-project-structure)
+13. [Known limitations](#13-known-limitations)
+14. [Data and credits](#14-data-and-credits)
+
+---
+
+## 1. Quick start
+
+**Requirements:** Python 3.12+, Node.js 20+, npm.
+
+```bash
+./scripts/setup.sh    # once: Python venv + backend deps, frontend deps
+./scripts/start.sh    # backend on :8000 and frontend on :5173
+```
+
+Then open **http://localhost:5173**.
+
+| Command | What it does |
+|---|---|
+| `./scripts/setup.sh` | Creates `backend/.venv`, installs the backend, runs `npm ci` in `frontend/` |
+| `./scripts/start.sh` | Starts the FastAPI backend (`uvicorn`) and the Vite frontend together |
+| `cd backend && .venv/bin/pytest` | Runs the backend test suite |
+| `cd frontend && npm test` | Runs the frontend test suite |
+
+The database is a single SQLite file at `backend/var/holiday.db`. It is created on first start. Delete
+it to reset all packages and reservations. The catalog in `data/` is read-only and is never changed.
+
+> The app does **not** call any AI or LLM model, locally or in the cloud. Every decision is plain,
+> deterministic code.
+
+---
+
+## 2. What the app does
+
+```mermaid
+flowchart LR
+    A["1. Enter the trip<br/>origin, country, start date,<br/>nights, travelers, budget"] --> B["2. See the package<br/>cities, flights, hotels,<br/>transfers, day-by-day plan, total"]
+    A --> X["No package fits<br/>say why, show cheapest total,<br/>suggest a change"]
+    X -- edit the trip --> A
+    B -- not happy yet --> C["3. Change something<br/>hotel, flight, attractions, cities"]
+    C -- every rule checked again --> B
+    B -- happy --> D["4. Confirm<br/>10-digit reservation number"]
+    D --> E["5. Reservation summary<br/>open it again by its number"]
+```
+
+The traveler gives seven things: **departure city, destination country, holiday start date, number of
+nights, adults, children's ages, and budget**. The app chooses the cities, their order, and the nights
+in each, then builds one complete package. The holiday start date is the day the arrival flight lands;
+the return flight leaves on the last day, with no hotel night that day.
+
+**Example — the Menon family:** Bengaluru → Japan, 10 April 2027, 6 nights, 2 adults + 1 child (6),
+budget ₹3,50,000.
+
+---
+
+## 3. Feature status
+
+Status legend: **Done** · **In progress** · **Planned**
+
+### Must have
+
+| # | Feature | How we meet it | Status |
+|---|---|---|---|
+| M1 | Request form | 7 fields; departure cities and countries come from the API (read from `destinations.json`); every invalid value gets a clear, field-level message | Planned |
+| M2 | Build one package | The backend chooses the city plan and builds a full package; when none is possible it says so and why | Planned |
+| M3 | Rules are respected | One validator checks every rule of section 4 before a package is shown, changed, exported, or booked | Planned |
+| M4 | Day-by-day plan | Timeline per day in time order: flights, transfers, hotel check-in/out, attractions | Planned |
+| M5 | Total and budget | Total in INR, budget, amount left or over; JSON export in the shared trip format | Planned |
+| M6 | Change the package | Change hotel, change a flight, add or remove attractions; the whole package is re-checked and re-priced, or the change is refused with a reason | Planned |
+| M7 | Confirm and reservation summary | Unique 10-digit number; the summary opens after a backend restart; a wrong number shows "not found" | Planned |
+| M8 | Budget too small | Says so, shows the cheapest total, and suggests concrete changes that do fit | Planned |
+
+### Good to have
+
+| # | Feature | How we meet it | Status |
+|---|---|---|---|
+| G1 | Changes that affect other parts | After a change the app re-times dependent items (transfers, attraction visits) or warns about them | Planned |
+| G2 | Price difference | Every option in a change list shows +/− INR against the current choice | Planned |
+| G3 | Change cities | The traveler can pick another valid city plan; the package is rebuilt | Planned |
+| G4 | Three packages | Cheapest, fastest, and best rated (night-weighted hotel stars, within budget) | Planned |
+
+### Stretch
+
+| # | Feature | How we meet it | Status |
+|---|---|---|---|
+| S1 | Quick request | Plain-words request parsed with rules and regular expressions (no AI) to fill the form | Planned |
+| S2 | Booking uses up seats and rooms | Confirmed bookings hold seats and room-nights in our own store; a booking needing the same last seats/rooms is refused | Planned |
+| S3 | Our own ideas | Live rule checklist on every package; a checker page that validates any exported trip JSON; budget-fix suggestions; photo gallery with credits | Planned |
+
+---
+
+## 4. Architecture
+
+```mermaid
+flowchart TB
+    subgraph FE["Frontend · React + Vite + TypeScript"]
+        UI["Pages: Request · Package · Reservation · Checker"]
+        CL["API client<br/>retry + backoff + Idempotency-Key"]
+        UI --> CL
+    end
+
+    subgraph BE["Backend · Python + FastAPI"]
+        API["API routers (thin)"]
+        PL["Planner<br/>city plans · flights · hotels ·<br/>transfers · attractions · objectives"]
+        CH["Change engine<br/>operations · repair"]
+        RV["Rule validator<br/>single source of truth"]
+        PR["Pricing"]
+        EX["Trip-format exporter"]
+        QP["Quick-request parser<br/>(rules only)"]
+        CAT["Catalog (read-only, indexed in memory)"]
+        ST["Store · SQLite<br/>packages · reservations ·<br/>idempotency keys · inventory holds"]
+        API --> PL & CH & EX & QP
+        PL --> RV
+        CH --> RV
+        RV --> PR
+        PL & CH & RV --> CAT
+        API --> ST
+    end
+
+    DATA[("data/catalog/*.json")] --> CAT
+    CL -- "JSON over HTTP /api" --> API
+```
+
+**Design principles**
+
+- **The backend holds all logic.** City choice, package building, rule checks, and prices run in the
+  backend. The frontend only renders what the API returns.
+- **One validator, used everywhere.** The builder generates candidates and only keeps the ones the
+  validator passes with zero violations. The same validator re-checks every change, powers the rule
+  checklist in the UI, runs on confirm, and backs the checker page.
+- **Catalog is read-only.** All flights, hotels, rooms, transfers, attractions, prices, and opening times
+  come from `data/catalog/`. Our own state (packages, reservations, inventory holds) lives in SQLite.
+- **Deterministic.** The same request on the same data always gives the same package, which makes the
+  behaviour easy to test and to explain.
+- **Thin layers.** Routers → services (planner, changes, store) → pure domain functions (rules, pricing,
+  time). Domain functions do no I/O and are unit-tested in isolation.
+
+| Layer | Tech |
+|---|---|
+| Backend | Python 3.12, FastAPI, Pydantic v2, Uvicorn |
+| Storage | SQLite (WAL mode) via the standard `sqlite3` module |
+| Frontend | React 18, Vite, TypeScript |
+| Tests | pytest, hypothesis (property-based), Vitest, Testing Library |
+
+---
+
+## 5. Our city rule
+
+The app — not the traveler — chooses the cities, the order, and the nights in each.
+
+1. **Candidates.** Every ordered sequence of distinct cities in the chosen country where each step has a
+   link in `destinations.json`, and every split of the nights that gives each city **at least 2 nights in
+   a row**. Each city appears once.
+2. **Hard filters.** A candidate survives only if:
+   - an arrival flight from the departure airport lands on the start date at an airport that serves the
+     **first** city, with enough seats for every traveler (children included);
+   - a return flight leaves on the last day from an airport that serves the **last** city, with enough
+     seats;
+   - each city has a hotel room type that fits the party with enough free rooms on **every** night;
+   - the airport and between-city transfers fit their service hours;
+   - every full day can hold 1–2 open, non-overlapping attractions.
+3. **Preference.** Among the survivors the recommended package:
+   1. visits **as many cities as the nights allow** (more variety for the traveler);
+   2. gives more nights to the city with more to see (open attractions during the stay);
+   3. has the **lowest total travel time**, then the **lowest total price** — **within budget**.
+
+   If the most varied plan does not fit the budget, the app falls back to fewer cities before it
+   reports that the budget is too small.
+
+For the three-package view (G4) the same search runs with a different objective:
+
+| Package | Objective | Tie-break |
+|---|---|---|
+| Cheapest | Lowest total price | Shorter travel time |
+| Fastest | Least travel time = both flight `duration_minutes` + every between-city transfer `duration_minutes` | Lower total |
+| Best rated | Highest hotel `stars` averaged per night, total within budget (guest `rating` does not count) | Lower total |
+
+---
+
+## 6. How a package is built
+
+For a city plan `c1 … cn` with nights `n1 … nn`:
+
+| Step | What happens |
+|---|---|
+| Dates | Day 1 is the start date (arrival). City *i* owns its nights in order; the first night of each later city is a city-change day. The last day has no hotel night. |
+| Flights | Arrival: `from` = departure airport, `to` serves `c1`, `arrival_local` date = start date. Return: `from` serves `cn`, `to` = departure airport, `departure_local` date = last day. `seats_left ≥ adults + children`. |
+| Hotels | For every room type, the smallest number of rooms *k* that fits: `adults ≤ k × max_adults`, `adults + children ≤ k × (max_adults + max_children)`, `adults ≥ k`. `rooms_left ≥ k` on every night. One hotel and one room type per city. |
+| Airport in | A transfer for the arrival airport, the hotel's city and area (or all areas). Pickup is the earliest time ≥ landing + 60 min that is inside the service hours. |
+| Airport out | Latest pickup such that pickup + duration ≤ departure − 180 min, inside the service hours. |
+| Between cities | One transfer from the link's `transfer_ids` on each change day, with a departure inside its service hours (on the timetable grid when `frequency_minutes` is given). |
+| Attractions | A backtracking scheduler gives every full day 1–2 visits in the city of that night's hotel: open that weekday, not on a closed date, the whole visit inside opening hours, no overlaps, each attraction once. On arrival and change days, visits are optional and start after the traveler reaches the city. None on the last day. |
+| Price and check | Every item is priced (section 7) and the package goes through the validator. Any violation discards it. |
+
+**Time handling.** All times are local. Inside the destination country everything shares one time zone,
+so times are compared directly there. Flight duration comes from `duration_minutes`, never from the two
+local timestamps. Service windows handle `24:00` (end of day) and windows that run past midnight
+(for example `06:00`–`00:30`); both ends are inclusive.
+
+**When nothing works.**
+
+| Situation | Response |
+|---|---|
+| Invalid value | HTTP 422 with a message per field (unknown city/country, nights outside 3–10, dates outside 1–20 April 2027, child age outside 0–17, budget not positive, …) |
+| No possible package | `NO_PACKAGE` with the reason, e.g. "No flight from Delhi lands in Japan on 2 April 2027", plus nearby dates that do work |
+| Packages exist, none in budget | `OVER_BUDGET` with the cheapest total, how much it is over, and suggestions that were actually re-solved (fewer nights, other dates, fewer cities, budget needed) |
+
+---
+
+## 7. Rule checking
+
+The validator returns a list of violations, each with a code, the item it concerns, and a readable
+message. A package is correct only when the list is empty.
+
+| Group | Rules checked |
+|---|---|
+| Dates and cities | 3–10 nights; first night ≥ 1 Apr 2027; return ≤ 20 Apr 2027; all cities in the chosen country; ≥ 2 consecutive nights per city; each city once |
+| Flights | One arrival + one return; arrival lands on the start date at an airport serving the first city; return leaves on the last day from an airport serving the last city; enough seats for every traveler |
+| Airport transfers | One in, one out; serves the hotel's city and area; pickup ≥ 60 min after landing; at the airport ≥ 180 min before departure; pickup and hotel-leave times inside service hours |
+| Between cities | One transfer per city change, matching `from_city`/`to_city`, inside service hours |
+| Hotels | A hotel every night, none on the last day; one hotel + one room type per city; rooms fit the travelers; `rooms_left ≥ k` every night |
+| Attractions | In the city of that night's hotel; open that day; visit inside opening hours; no overlaps; each at most once; 1–2 on every full day (first package); after arrival on arrival/change days; none on the last day |
+| Prices | Every item matches the formula below; the total is the sum of all items |
+
+| Part | Price |
+|---|---|
+| Flight | `price_per_seat × travelers` |
+| Hotel | `price_per_night × rooms × nights` |
+| Transfer, `PER_PERSON` | `adults × price + children × child_price` (or `price` when there is no `child_price`) |
+| Transfer, `PER_VEHICLE` | `price × ceil(travelers ÷ max_passengers)` |
+| Attraction | `adults × price_per_person + children × child_price` (or `price_per_person` when there is none) |
+
+A child is anyone aged 0–17. A `child_price` of `0` means free, which is different from no `child_price`.
+
+---
+
+## 8. Idempotency, retries and persistence
+
+Bookings must happen exactly once, even when the network drops a response or the traveler double-clicks.
+
+| Concern | How it is handled |
+|---|---|
+| Confirm is retried | `POST /api/packages/{id}/confirm` takes an `Idempotency-Key` header. The key, a hash of the request, and the response are stored **in the same transaction** as the reservation. A replay returns the same reservation number and body. The same key with a different body is rejected. Confirming an already-booked package returns its existing reservation. |
+| Build is retried | `POST /api/packages` accepts an `Idempotency-Key`; a replay returns the same package instead of creating a duplicate. |
+| Change is retried | Every change carries `expected_version` (optimistic concurrency) and an idempotency key. A lost-response retry returns the stored result; a stale version (e.g. another tab) gets `409 Conflict` with the current package. |
+| Reservation number | Exactly 10 digits, no leading zero, from a cryptographically secure random source; stored as a primary key; regenerated on the rare collision. |
+| Last seats/rooms (S2) | Confirm runs in one `BEGIN IMMEDIATE` transaction: re-validate against catalog availability minus existing holds, write the holds, write the reservation, commit. A competing booking for the same last seats or rooms gets `409` with the reason. |
+| Client retries | The frontend retries only network errors, `429`, `502`, `503`, `504`, with exponential backoff and jitter (max 3 attempts), reusing the **same** idempotency key. It never retries other `4xx` answers. The confirm button is disabled while a request is in flight. |
+| Database busy | SQLite in WAL mode with a busy timeout and a short bounded retry. |
+| Restarts | Packages, versions, reservations, idempotency keys, and holds are all in `backend/var/holiday.db`, so a page refresh or a backend restart loses nothing. |
+
+---
+
+## 9. API reference
+
+Base URL: `http://localhost:8000/api`
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/options` | Departure cities, countries, night limits, data window — for the form |
+| `POST` | `/packages` | Build from a request. Returns the recommended package + cheapest / fastest / best rated, or `NO_PACKAGE` / `OVER_BUDGET` |
+| `GET` | `/packages/{id}` | A package with days, items, total, budget, left/over, and rule checklist |
+| `GET` | `/packages/{id}/options/hotels?city=` | Valid hotel + room alternatives with price difference |
+| `GET` | `/packages/{id}/options/flights?leg=arrival\|return` | Valid flight alternatives with price difference and side effects |
+| `GET` | `/packages/{id}/options/attractions?date=` | Attractions that can be added on that day |
+| `GET` | `/packages/{id}/city-plans` | Other valid city plans |
+| `POST` | `/packages/{id}/changes` | Apply one change (`replace_hotel`, `replace_flight`, `add_attraction`, `remove_attraction`, `change_city_plan`) |
+| `GET` | `/packages/{id}/export` | Download the package as trip-format JSON |
+| `POST` | `/packages/{id}/confirm` | Book it (idempotent) → reservation number |
+| `GET` | `/reservations/{number}` | Reservation summary, or `404 {"detail": "not found"}` |
+| `POST` | `/quick-request` | Parse plain text into form fields (rules, no AI) |
+| `POST` | `/check` | Validate any trip JSON against every rule |
+
+Example request body for `POST /packages`:
+
+```json
+{
+  "departure_airport": "BLR",
+  "country": "Japan",
+  "start_date": "2027-04-10",
+  "nights": 6,
+  "adults": 2,
+  "child_ages": [6],
+  "budget_inr": 350000
+}
+```
+
+---
+
+## 10. Package export (JSON)
+
+The export follows the shared trip format in the organisers' data dictionary (section 4), with the
+additions this problem asks for: `country` on the trip, `room_id` on hotel items, and after confirm
+`status: "BOOKED"` on every item and `booking.reference` set to the reservation number as a string.
+
+```json
+{
+  "trip_id": "pkg_…",
+  "traveler": { "name": "Menon family", "home_airport": "BLR", "adults": 2, "children": 1, "child_ages": [6] },
+  "start_date": "2027-04-10",
+  "end_date": "2027-04-16",
+  "country": "Japan",
+  "budget_inr": 350000,
+  "total_inr": 0,
+  "items": [
+    {
+      "item_id": "i1", "type": "flight", "name": "…", "city": "Tokyo", "status": "PLANNED",
+      "catalog_id": "FL-…", "room_id": null, "start": "2027-04-09T23:50", "end": "2027-04-10T10:30",
+      "quantity": 3, "price_inr": 0, "booking": null, "sources": [], "warnings": []
+    }
+  ]
+}
+```
+
+---
+
+## 11. Testing
+
+We work test-first: the tests for a module are written and committed before the module.
+
+| Suite | What it covers |
+|---|---|
+| Rule unit tests | A known-good package; each test breaks exactly one rule (a child without a seat, pickup 59 min after landing, overlapping visits, a closed date, too few rooms, wrong area, …) and expects that exact violation |
+| Pricing | Every formula, `child_price` of 0 vs missing, vehicle rounding |
+| Time | `24:00`, windows past midnight, inclusive ends, weekdays of known dates |
+| Planner | City-plan enumeration, the Menon request, over-budget and no-package cases, invalid input |
+| Exhaustive / property-based | Every departure city × country × start date × nights × party shape × budget: the result is either a package with **zero** violations or a clear `NO_PACKAGE` / `OVER_BUDGET` — never an invalid package |
+| Changes | Every change gives a valid package or a refusal with a reason; totals and versions update |
+| API / integration | Idempotent confirm (same key twice → same number; concurrent confirms → one reservation), persistence across restart, `not found`, export shape |
+| Data guard | Checksums prove `data/catalog/` is byte-identical to the organiser files |
+| Frontend | Form messages, retrying API client, timeline order, budget display |
+
+```bash
+cd backend && .venv/bin/pytest -q
+cd frontend && npm test
+```
+
+---
+
+## 12. Project structure
+
+```
+NeuroNix-Hackcellence/
+├── README.md
+├── data/                      # organiser data, unchanged
+│   ├── catalog/               # destinations, airports, flights, hotels, rooms, availability, transfers, attractions
+│   └── trip_format_example.json
+├── images/                    # organiser photos + ATTRIBUTIONS.md
+├── scripts/
+│   ├── setup.sh
+│   └── start.sh
+├── backend/
+│   ├── app/
+│   │   ├── api/               # FastAPI routers
+│   │   ├── catalog/           # loader + typed records + indexes
+│   │   ├── domain/            # request, package model, time, pricing
+│   │   ├── rules/             # the validator, one module per rule group
+│   │   ├── planner/           # city plans, flights, hotels, transfers, attractions, objectives, diagnostics
+│   │   ├── changes/           # change operations + repair (G1)
+│   │   ├── export/            # trip-format JSON
+│   │   ├── quick/             # rule-based quick-request parser
+│   │   └── store/             # SQLite: packages, reservations, idempotency, inventory
+│   └── tests/                 # unit, integration, exhaustive
+└── frontend/
+    └── src/
+        ├── api/               # client with retry + idempotency
+        ├── pages/             # Request, Package, Reservation, Checker
+        └── components/        # TripForm, DayTimeline, BudgetBar, ChangeDrawer, …
+```
+
+---
+
+## 13. Known limitations
+
+- Flights, rooms, and availability exist only from **1 to 20 April 2027**; other dates have no package
+  by design.
+- Nara has attractions but no hotels, so Nara attractions cannot be part of a package.
+- One-stop flights are shown as one item; the stop is not listed separately.
+- Hotel check-in and check-out times are shown for information only and do not restrict the plan.
+- City taxis to and from stations on change days are optional; they are added only when the traveler
+  asks, and then priced.
+- For a very early return flight, the hotel-to-airport pickup can be the evening before (still inside
+  service hours, and that evening is a booked hotel night).
+- No login and no payment: "confirm" saves the reservation in the app's own database.
+- This section will be updated with anything unfinished at code freeze.
+
+---
+
+## 14. Data and credits
+
+- All catalog data is synthetic and supplied by the organisers. It is read-only and used unchanged.
+- All prices are in INR (whole rupees). All times are local to the place.
+- Photos are real, freely licensed images from Wikimedia Commons. Credits are in
+  [`images/ATTRIBUTIONS.md`](images/ATTRIBUTIONS.md) and are shown in the app wherever photos appear.
