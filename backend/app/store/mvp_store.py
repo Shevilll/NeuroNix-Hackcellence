@@ -55,7 +55,7 @@ class Store:
                     c.execute("COMMIT")
                     return json.loads(row[0])["package_id"]
             pid = uuid.uuid4().hex[:12]
-            package["trip_id"] = pid
+            package["trip_id"], package["version"] = pid, 1
             c.execute("INSERT INTO packages VALUES (?, ?)", (pid, json.dumps(package)))
             if key:
                 c.execute("INSERT INTO idempotency VALUES (?, 'build', ?)", (key, json.dumps({"package_id": pid})))
@@ -66,6 +66,27 @@ class Store:
     def get_package(self, pid: str) -> dict[str, Any] | None:
         row = self._run(lambda c: c.execute("SELECT body FROM packages WHERE id=?", (pid,)).fetchone())
         return json.loads(row[0]) if row else None
+
+    def update_package(self, pid: str, package: dict[str, Any], expected_version: int) -> str:
+        """Optimistic update: 'ok', 'conflict' (stale version), 'booked' or 'missing'."""
+        def go(c):
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT body FROM packages WHERE id=?", (pid,)).fetchone()
+            current = json.loads(row[0]) if row else None
+            if current is None:
+                c.execute("ROLLBACK")
+                return "missing"
+            if c.execute("SELECT 1 FROM reservations WHERE package_id=?", (pid,)).fetchone():
+                c.execute("ROLLBACK")
+                return "booked"
+            if current.get("version", 1) != expected_version:
+                c.execute("ROLLBACK")
+                return "conflict"
+            package["trip_id"], package["version"] = pid, expected_version + 1
+            c.execute("UPDATE packages SET body=? WHERE id=?", (json.dumps(package), pid))
+            c.execute("COMMIT")
+            return "ok"
+        return self._run(go)
 
     # ----- reservations
     def get_reservation(self, number: str) -> dict[str, Any] | None:

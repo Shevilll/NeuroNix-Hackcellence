@@ -54,3 +54,24 @@ def test_invalid_request_is_422_with_field_messages(settings):
 
 def test_unknown_package_is_404(settings):
     assert TestClient(create_app(settings)).get("/api/packages/nope").status_code == 404
+
+
+def test_change_flow_versions_and_booked_lock(settings):
+    client = TestClient(create_app(settings))
+    built = client.post("/api/packages", json=MENON).json()
+    pid, pkg = built["package_id"], built["package"]
+    assert pkg["version"] == 1
+    city = pkg["cities"][0]
+    opts = client.get(f"/api/packages/{pid}/options/hotels", params={"city": city}).json()
+    pick = opts[-1]
+    body = {"op": "replace_hotel", "city": city, "hotel_id": pick["hotel_id"], "room_id": pick["room_id"],
+            "expected_version": 1}
+    done = client.post(f"/api/packages/{pid}/changes", json=body)
+    assert done.status_code == 200 and done.json()["package"]["version"] == 2
+    assert client.post(f"/api/packages/{pid}/changes", json=body).status_code == 409  # stale version
+    refused = client.post(f"/api/packages/{pid}/changes",
+                          json={"op": "replace_hotel", "city": city, "hotel_id": "X", "room_id": "Y", "expected_version": 2})
+    assert refused.status_code == 422 and refused.json()["detail"]["message"]
+    client.post(f"/api/packages/{pid}/confirm", headers={"Idempotency-Key": "z"})
+    locked = client.post(f"/api/packages/{pid}/changes", json={**body, "expected_version": 2})
+    assert locked.status_code == 409

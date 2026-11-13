@@ -4,6 +4,7 @@ import json
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
+from app.changes.operations import ChangeRefused, apply_change, list_options
 from app.domain.request import RequestInvalid, parse_request
 from app.planner.builder import build_package
 
@@ -67,3 +68,34 @@ def reservation(number: str, request: Request) -> dict:
     if body is None:
         raise HTTPException(404, detail="not found")
     return body
+
+
+@router.get("/packages/{pid}/options/{kind}")
+def options(pid: str, kind: str, request: Request, city: str | None = None, role: str | None = None) -> list:
+    package = _package(request, pid)
+    if kind not in ("hotels", "flights", "attractions"):
+        raise HTTPException(404, detail="not found")
+    if kind == "hotels" and city is None:
+        raise HTTPException(422, detail="city is required")
+    if kind == "flights" and role not in ("arrival_flight", "return_flight"):
+        raise HTTPException(422, detail="role must be arrival_flight or return_flight")
+    return list_options(package, request.app.state.catalog, kind, city=city, role=role)
+
+
+@router.post("/packages/{pid}/changes")
+def change(pid: str, payload: dict, request: Request) -> dict:
+    package = _package(request, pid)
+    store = request.app.state.store
+    expected = payload.get("expected_version", package.get("version", 1))
+    if expected != package.get("version", 1):
+        raise HTTPException(409, detail={"message": "The package changed in another tab.", "package": package})
+    try:
+        updated = apply_change(package, request.app.state.catalog, payload)
+    except ChangeRefused as refusal:
+        raise HTTPException(422, detail={"message": refusal.reason, "violations": refusal.violations}) from refusal
+    outcome = store.update_package(pid, updated, expected)
+    if outcome == "booked":
+        raise HTTPException(409, detail={"message": "This package is already booked."})
+    if outcome == "conflict":
+        raise HTTPException(409, detail={"message": "The package changed in another tab.", "package": store.get_package(pid)})
+    return {"package_id": pid, "package": store.get_package(pid)}
