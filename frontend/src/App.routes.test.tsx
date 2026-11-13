@@ -31,6 +31,35 @@ describe("site footer", () => {
   });
 });
 
+describe("/credits (photo credits from images/ATTRIBUTIONS.md)", () => {
+  it("is linked from the footer on every page", async () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi()));
+    render(<App />);
+    expect(within(screen.getByRole("contentinfo")).getByRole("link", { name: /photo credits/i })).toHaveAttribute("href", "/credits");
+  });
+
+  it("lists every photo with what it shows, its author, source and licence", async () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi()));
+    window.history.pushState({}, "", "/credits");
+    render(<App />);
+    expect(screen.getByRole("heading", { level: 1, name: /photo credits/i })).toBeInTheDocument();
+    const rows = await screen.findAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByText("Kiyomizu-dera")).toBeInTheDocument();
+    expect(within(rows[0]).getByText(/Martin Falbisoner/)).toBeInTheDocument();
+    expect(within(rows[0]).getByRole("link", { name: "Kiyomizu.jpg" })).toHaveAttribute("href", "https://commons.wikimedia.org/wiki/File:Kiyomizu.jpg");
+    expect(within(rows[0]).getByRole("link", { name: "CC BY-SA 4.0" })).toHaveAttribute("href", "https://creativecommons.org/licenses/by-sa/4.0");
+    expect(within(rows[1]).getByText(/Jane Doe/)).toBeInTheDocument();
+  });
+
+  it("says so when the credits cannot be loaded", async () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi((url) => (url === "/api/credits" ? reply(500, { detail: "boom" }) : undefined))));
+    window.history.pushState({}, "", "/credits");
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not load the photo credits/i);
+  });
+});
+
 describe("/r without a number", () => {
   it("explains where the reservation number comes from", async () => {
     vi.stubGlobal("fetch", vi.fn(stubApi()));

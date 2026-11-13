@@ -57,6 +57,16 @@ export function makePackage(overrides: Partial<TripPackage> = {}): TripPackage {
   };
 }
 
+/** Two photo credits as GET /api/credits returns them. */
+export const credits = [
+  { file: "images/attractions/ATT-KYO-001.jpg", used_for: "Kiyomizu-dera", source_title: "Kiyomizu.jpg",
+    source_url: "https://commons.wikimedia.org/wiki/File:Kiyomizu.jpg", author: "Martin Falbisoner",
+    license: "CC BY-SA 4.0", license_url: "https://creativecommons.org/licenses/by-sa/4.0" },
+  { file: "images/hotels/HOTEL-TWIN-1.jpg", used_for: "Hotel room (generic)", source_title: "Twin room.jpg",
+    source_url: "https://commons.wikimedia.org/wiki/File:Twin_room.jpg", author: "Jane Doe",
+    license: "CC0", license_url: "http://creativecommons.org/publicdomain/zero/1.0/deed.en" },
+];
+
 /** A JSON Response for a stubbed fetch. */
 export const reply = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -95,6 +105,7 @@ export function stubApi(extra?: (url: string, init?: RequestInit) => Response | 
     if (url === "/api/options") return reply(200, tripOptions);
     if (url === "/api/check") return reply(200, okCheck);
     if (url === "/api/images") return reply(200, {});
+    if (url === "/api/credits") return reply(200, credits);
     return reply(404, { detail: "not found" });
   };
 }

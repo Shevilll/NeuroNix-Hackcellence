@@ -30,3 +30,15 @@ def test_credits_list_every_photo_with_author_and_license(tmp_path):
     assert row["source_url"].startswith("https://commons.wikimedia.org/")
     assert len(credits) >= 56
     assert all(r["author"] and r["license"] and r["source_url"] for r in credits)
+
+
+def test_credit_links_keep_brackets_inside_the_url(tmp_path):
+    credits = client(tmp_path).get("/api/credits").json()
+    mosque = next(c for c in credits if c["file"] == "images/attractions/ATT-AUH-001.jpg")
+    assert mosque["source_url"] == (
+        "https://commons.wikimedia.org/wiki/File:Sheikh_Zayed_Grand_Mosque_@_Abu_Dhabi_(15856602738).jpg"
+    )
+    assert mosque["source_title"] == "Sheikh Zayed Grand Mosque @ Abu Dhabi (15856602738).jpg"
+    for c in credits:
+        assert c["source_url"].startswith("https://"), c
+        assert c["source_url"].count("(") == c["source_url"].count(")"), c
