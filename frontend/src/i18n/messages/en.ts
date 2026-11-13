@@ -149,6 +149,8 @@ const en = {
   "p.Abu Dhabi": "Abu Dhabi",
   "p.Japan": "Japan",
   "p.United Arab Emirates": "United Arab Emirates",
+  "pkg.addToCalendar": "Add to calendar",
+  "pkg.addToCalendarHint": "Downloads an .ics file with every flight, transfer, hotel stay and visit",
 };
 
 export type MessageKey = keyof typeof en;

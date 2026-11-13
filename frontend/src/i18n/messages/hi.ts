@@ -150,6 +150,8 @@ const hi: Messages = {
   "p.Abu Dhabi": "अबू धाबी",
   "p.Japan": "जापान",
   "p.United Arab Emirates": "संयुक्त अरब अमीरात",
+  "pkg.addToCalendar": "कैलेंडर में जोड़ें",
+  "pkg.addToCalendarHint": "हर उड़ान, ट्रांसफ़र, होटल और घूमने की जगह के साथ एक .ics फ़ाइल डाउनलोड करता है",
 };
 
 export default hi;

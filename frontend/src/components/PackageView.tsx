@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { newIdempotencyKey } from "../api/client";
 import { changePackage, checkTrip, type CheckReport, type TripItem, type TripPackage } from "../api/endpoints";
 import { useI18n } from "../i18n/I18nProvider";
+import { calendarFileName, tripCalendar } from "../lib/calendar";
 import { messageFrom } from "../lib/errors";
 import { eachDay, inr, nightsBetween, timeOf } from "../lib/format";
 import BudgetBar from "./BudgetBar";
@@ -159,6 +160,10 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
     );
   }
 
+  const calendarHref = useMemo(
+    () => (items.length ? `data:text/calendar;charset=utf-8,${encodeURIComponent(tripCalendar(pkg))}` : null),
+    [pkg, items.length],
+  );
   const who = travellers(pkg, count);
   const nights = pkg.nights_per_city?.reduce((a, b) => a + b, 0) ?? 0;
 
@@ -237,6 +242,11 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
           {pkg.trip_id && (
             <a className="btn btn--ghost btn--block" href={`/api/packages/${pkg.trip_id}/export`} download>
               <Icon name="file" /> {t("pkg.export")}
+            </a>
+          )}
+          {calendarHref && (
+            <a className="btn btn--ghost btn--block" href={calendarHref} download={calendarFileName(pkg)} title={t("pkg.addToCalendarHint")}>
+              <Icon name="calendar" /> {t("pkg.addToCalendar")}
             </a>
           )}
         </div>
