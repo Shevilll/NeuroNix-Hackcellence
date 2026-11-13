@@ -1,0 +1,98 @@
+/* Shared look for custom form controls (dropdown and date picker), matching the text inputs. */
+.control {
+  position: relative;
+  min-width: 0;
+}
+
+.control__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.control__trigger:hover {
+  border-color: var(--text);
+}
+
+.control__trigger:focus-visible,
+.control__trigger--open {
+  border-color: var(--blue-600);
+  outline: 2px solid var(--blue-600);
+  outline-offset: 0;
+}
+
+.control__trigger--invalid {
+  border-color: var(--error);
+}
+
+.control__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.control__value--placeholder {
+  color: var(--text-muted);
+}
+
+.control__icon {
+  flex: none;
+  display: block;
+  color: var(--blue-900);
+  transition: transform 0.15s ease;
+}
+
+.control__trigger--open .control__icon--chevron {
+  transform: rotate(180deg);
+}
+
+.control__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(26, 26, 26, 0.16);
+}
+
+/* Dropdown options */
+.select__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  min-width: 100%;
+}
+
+.select__option {
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.select__option--active {
+  background: var(--blue-100);
+}
+
+.select__option--chosen {
+  color: var(--blue-900);
+  font-weight: 700;
+}

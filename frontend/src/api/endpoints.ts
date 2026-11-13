@@ -31,8 +31,19 @@ export interface TripItem {
   warnings?: string[];
 }
 
+export interface Traveler {
+  name?: string;
+  home_airport?: string;
+  adults?: number;
+  children?: number;
+  child_ages?: number[];
+}
+
 export interface TripPackage {
   version?: number;
+  country?: string;
+  traveler?: Traveler;
+  objective?: string;
   travel_minutes?: number;
   avg_stars?: number;
   trip_id: string;
@@ -99,11 +110,32 @@ export async function getReservation(number: string) {
 export interface ChangeOption {
   hotel_id?: string;
   room_id?: string;
+  hotel_name?: string;
+  stars?: number;
+  rating?: number;
+  area?: string | null;
+  rooms?: number;
   flight_id?: string;
+  depart?: string;
+  arrive?: string;
   attraction_id?: string;
+  city?: string;
   date?: string;
   name: string;
   price_diff: number;
+}
+
+/** Something the traveler should know after a change (G1), e.g. OVER_BUDGET or EMPTY_DAY. */
+export interface ChangeWarning {
+  code: string;
+  message: string;
+}
+
+export interface ChangeResult {
+  package_id: string;
+  package: TripPackage;
+  price_diff_inr?: number;
+  warnings?: ChangeWarning[];
 }
 
 export async function getOptions2(id: string, kind: string, params: Record<string, string> = {}) {
@@ -111,14 +143,19 @@ export async function getOptions2(id: string, kind: string, params: Record<strin
   return (await api.request<ChangeOption[]>(`/api/packages/${id}/options/${kind}${qs ? `?${qs}` : ""}`)).data;
 }
 
-export async function changePackage(id: string, change: Record<string, unknown>) {
+/** One key per traveler action: a retry of the same change is replayed by the backend, never applied twice. */
+export async function changePackage(id: string, change: Record<string, unknown>, idempotencyKey = newIdempotencyKey()) {
   return (
-    await api.request<{ package: TripPackage }>(`/api/packages/${id}/changes`, {
+    await api.request<ChangeResult>(`/api/packages/${id}/changes`, {
       method: "POST",
       body: change,
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey,
     })
   ).data;
+}
+
+export async function getPackage(id: string) {
+  return (await api.request<TripPackage>(`/api/packages/${id}`)).data;
 }
 
 export interface QuickResult {

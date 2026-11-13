@@ -1,0 +1,720 @@
+/* Page shell and the shared pieces of every page: header, hero band, page column, package picker,
+   budget, summary, reservation, lookup, checker and change panels. Colours come only from tokens.css. */
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Header ---------- */
+.app-header {
+  background: var(--blue-900);
+  color: var(--on-primary);
+}
+
+.app-header__inner {
+  max-width: var(--max-width);
+  height: auto;
+  min-height: 64px;
+  margin: 0 auto;
+  padding: 10px var(--gutter);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--on-primary);
+  text-decoration: none;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.nav {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  overflow-x: auto;
+}
+
+.nav__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--on-primary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav__link:hover {
+  background: var(--blue-700);
+}
+
+.nav__link--active {
+  border-color: var(--on-primary);
+  background: var(--blue-700);
+}
+
+.nav__link:focus-visible,
+.brand:focus-visible {
+  outline-color: var(--on-primary);
+}
+
+/* ---------- Hero band (content below overlaps it) ---------- */
+.hero {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background: var(--blue-900);
+  color: var(--on-primary);
+}
+
+.hero__inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 28px var(--gutter) 96px;
+}
+
+.hero__sub {
+  max-width: 620px;
+}
+
+/* ---------- Page column ---------- */
+.page {
+  position: relative;
+  width: 100%;
+  max-width: var(--max-width);
+  margin: -64px auto 0;
+  padding: 0 var(--gutter) 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.app > main.page {
+  flex: 1 0 auto;
+}
+
+/* Narrow content stays on the same left edge as the hero title. */
+.page--narrow > * {
+  width: 100%;
+  max-width: 880px;
+}
+
+.page--footer {
+  margin-top: 0;
+  padding-bottom: 32px;
+}
+
+.planner-form,
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.results:empty {
+  display: none;
+}
+
+.section-title {
+  margin: 0 0 12px;
+  font-size: 1.375rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Buttons: sizes and variants ---------- */
+a.btn {
+  text-decoration: none;
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--lg {
+  min-height: 52px;
+  font-size: 1.0625rem;
+}
+
+.btn--sm {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 0.875rem;
+  gap: 6px;
+}
+
+.btn.btn--ghost {
+  background: transparent;
+  color: var(--blue-600);
+  border-color: transparent;
+}
+
+.btn.btn--ghost:hover {
+  background: var(--blue-50);
+}
+
+.fine-print {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.text-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+/* ---------- Package picker (G4) ---------- */
+.picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 12px;
+}
+
+.picker__tab {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.picker__tab:hover {
+  border-color: var(--blue-600);
+}
+
+.picker__tab--active {
+  border-color: var(--blue-600);
+  background: var(--blue-50);
+  box-shadow: 0 0 0 1px var(--blue-600), var(--shadow-lg);
+}
+
+.picker__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.picker__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--blue-900);
+  font-weight: 700;
+}
+
+.picker__flag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.picker__about {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.picker__price {
+  font-size: 1.375rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.picker__route {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.picker__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+/* ---------- Budget bar (M5) ---------- */
+.budget {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.budget__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.budget__total {
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.budget__of {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+}
+
+.budget__bar {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--skeleton);
+  overflow: hidden;
+}
+
+.budget__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue-600);
+}
+
+.budget__bar--over .budget__fill {
+  background: var(--error);
+}
+
+.budget__left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.budget__left--ok {
+  color: var(--ok);
+}
+
+.budget__left--over {
+  color: var(--error);
+}
+
+/* ---------- Summary card ---------- */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary .summary__lines {
+  gap: 0;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.summary__lines > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.summary__lines dt {
+  color: var(--text-muted);
+}
+
+.summary__lines dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary .summary__stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.summary__stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary .summary__actions {
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.summary__actions .inline-error {
+  margin: 0;
+}
+
+/* ---------- Rules card ---------- */
+.rules__verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.rules__verdict--ok {
+  color: var(--ok);
+}
+
+.rules__verdict--bad {
+  color: var(--error);
+}
+
+/* ---------- Change panels (G2, G3) ---------- */
+.change-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 16px 16px;
+  padding: 16px;
+  border: 1px solid var(--blue-200);
+  border-radius: var(--radius);
+  background: var(--blue-50);
+}
+
+.pkg__head-panel .change-panel {
+  margin: 0;
+}
+
+.change-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.change-panel__head h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.change-panel__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.change-panel .muted,
+.change-panel .inline-error {
+  margin: 0;
+}
+
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 26rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.option--current {
+  border-color: var(--blue-600);
+}
+
+.option__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.option__name {
+  font-weight: 600;
+}
+
+.option__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+}
+
+.option__stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diff {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.diff--down {
+  color: var(--blue-600);
+}
+
+.diff--same {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ---------- Reservation (M7) ---------- */
+.reservation {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.reservation__badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: 1.5rem;
+}
+
+.reservation__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reservation__body h2 {
+  font-size: 1.5rem;
+}
+
+.reservation__body .eyebrow,
+.reservation__body .muted {
+  margin: 0;
+}
+
+.reservation__number {
+  color: var(--blue-900);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.reservation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ---------- Reservation lookup (in the hero) ---------- */
+.hero .lookup {
+  max-width: 620px;
+  margin-top: 20px;
+}
+
+.lookup__field {
+  flex: 1 1 260px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.lookup__field:focus-within {
+  outline: 3px solid var(--blue-200);
+}
+
+.lookup .lookup__field input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  letter-spacing: 0.08em;
+}
+
+.lookup .btn {
+  min-height: 48px;
+}
+
+.lookup__error {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--error-bg);
+  color: var(--error);
+  font-weight: 600;
+}
+
+/* ---------- Trip checker (S3) ---------- */
+.checker {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.checker__drop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border: 2px dashed var(--blue-200);
+  border-radius: var(--radius);
+  background: var(--blue-50);
+}
+
+.checker__drop input[type="file"] {
+  grid-column: 2;
+}
+
+.checker__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--blue-600);
+  font-size: 1.5rem;
+}
+
+.checker__title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.checker__drop .muted {
+  margin: 4px 0 0;
+  font-size: 0.9375rem;
+}
+
+.checker__result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- Footer credits ---------- */
+.credits {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.credits .notice__text {
+  margin: 0;
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 720px) {
+  .nav {
+    margin-left: 0;
+    width: 100%;
+  }
+  .hero__inner {
+    padding-top: 20px;
+    padding-bottom: 80px;
+  }
+  .page {
+    margin-top: -56px;
+  }
+}
+
+@media (max-width: 560px) {
+  .nav {
+    gap: 2px;
+    scrollbar-width: none;
+  }
+  .nav__link {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0 8px;
+    font-size: 0.8125rem;
+  }
+  .nav__link .icon {
+    display: none;
+  }
+  .option {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .option .btn,
+  .option .tag {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .checker__drop {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .checker__drop input[type="file"] {
+    grid-column: 1;
+  }
+  .reservation {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picker__tab {
+    transition: none;
+  }
+}

@@ -29,7 +29,6 @@
   font-size: 0.9375rem;
 }
 
-.field select,
 .field input {
   min-height: 44px;
   padding: 0 12px;
@@ -40,14 +39,12 @@
   font: inherit;
 }
 
-.field select:focus,
 .field input:focus {
   border-color: var(--blue-600);
   outline: 2px solid var(--blue-600);
   outline-offset: 0;
 }
 
-.field--error select,
 .field--error input {
   border-color: var(--error);
 }
@@ -151,9 +148,20 @@
   min-width: 0;
 }
 
-.field select,
 .field input {
   width: 100%;
+}
+
+/* Number fields: no browser spinner arrows (the app's own controls handle input). */
+.field input[type="number"]::-webkit-inner-spin-button,
+.field input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.field input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 @media (max-width: 599px) {

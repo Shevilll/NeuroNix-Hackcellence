@@ -7,6 +7,8 @@ import {
   type FormErrors,
   type FormValues,
 } from "../domain/requestValidation";
+import DatePicker from "./DatePicker";
+import Select from "./Select";
 import Spinner from "./Spinner";
 import "./TripForm.css";
 
@@ -100,6 +102,12 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
     "aria-describedby": errors[key] ? `${key}-error` : undefined,
   });
 
+  /** Props for the custom dropdown and calendar, which take plain values instead of aria attributes. */
+  const custom = (key: ErrorKey) => ({
+    invalid: Boolean(errors[key]),
+    describedBy: errors[key] ? `${key}-error` : undefined,
+  });
+
   return (
     <form className="card trip-form" onSubmit={submit} noValidate>
       <div className="trip-form__head">
@@ -118,47 +126,39 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
       <fieldset className="trip-form__group">
         <legend>Where and when</legend>
         <div className="trip-form__grid trip-form__grid--two">
-        <Field id="origin" label="Departure city" error={errors.origin}>
-          <select
+        <Field id="origin" label="Departure city" error={errors.origin} custom>
+          <Select
             id="origin"
+            labelledBy="origin-label"
             value={values.origin}
-            onChange={(e) => update({ origin: e.target.value }, "origin")}
-            {...field("origin")}
-          >
-            <option value="">Select a city</option>
-            {options.departure_cities.map((c) => (
-              <option key={c.airport} value={c.airport}>
-                {c.city} ({c.airport})
-              </option>
-            ))}
-          </select>
+            placeholder="Select a city"
+            options={options.departure_cities.map((c) => ({ value: c.airport, label: `${c.city} (${c.airport})` }))}
+            onChange={(v) => update({ origin: v }, "origin")}
+            {...custom("origin")}
+          />
         </Field>
 
-        <Field id="country" label="Destination country" error={errors.country}>
-          <select
+        <Field id="country" label="Destination country" error={errors.country} custom>
+          <Select
             id="country"
+            labelledBy="country-label"
             value={values.country}
-            onChange={(e) => update({ country: e.target.value }, "country")}
-            {...field("country")}
-          >
-            <option value="">Select a country</option>
-            {options.countries.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            placeholder="Select a country"
+            options={options.countries.map((c) => ({ value: c.code, label: c.name }))}
+            onChange={(v) => update({ country: v }, "country")}
+            {...custom("country")}
+          />
         </Field>
 
-        <Field id="startDate" label="Start date" error={errors.startDate} hint={`Flights and rooms run ${formatLongDate(rules.data_window.first_night)} to ${formatLongDate(rules.data_window.last_departure)}.`}>
-          <input
+        <Field id="startDate" label="Start date" error={errors.startDate} custom hint={`Flights and rooms run ${formatLongDate(rules.data_window.first_night)} to ${formatLongDate(rules.data_window.last_departure)}.`}>
+          <DatePicker
             id="startDate"
-            type="date"
+            labelledBy="startDate-label"
+            value={values.startDate}
             min={rules.data_window.first_night}
             max={rules.data_window.last_departure}
-            value={values.startDate}
-            onChange={(e) => update({ startDate: e.target.value }, "startDate")}
-            {...field("startDate")}
+            onChange={(v) => update({ startDate: v }, "startDate")}
+            {...custom("startDate")}
           />
         </Field>
 
@@ -264,11 +264,15 @@ function Field(props: {
   errorId?: string;
   hint?: string;
   wide?: boolean;
+  /** True for custom controls (dropdown, calendar): the label names them by id instead of htmlFor. */
+  custom?: boolean;
   children: ReactNode;
 }) {
   return (
     <div className={`field${props.wide ? " field--wide" : ""}${props.error ? " field--error" : ""}`}>
-      <label htmlFor={props.id}>{props.label}</label>
+      <label id={`${props.id}-label`} htmlFor={props.custom ? undefined : props.id}>
+        {props.label}
+      </label>
       {props.children}
       {props.hint && !props.error && <p className="field__hint">{props.hint}</p>}
       {props.error && (
