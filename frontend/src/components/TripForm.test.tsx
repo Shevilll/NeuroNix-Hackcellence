@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { TripOptions } from "../api/types";
@@ -28,21 +28,36 @@ function setup(props: Partial<React.ComponentProps<typeof TripForm>> = {}) {
   return { onSubmit, user: userEvent.setup() };
 }
 
+/** Opens a custom dropdown by its label and clicks one of its options. */
+async function pick(user: ReturnType<typeof userEvent.setup>, label: RegExp, option: string) {
+  await user.click(screen.getByRole("combobox", { name: label }));
+  await user.click(within(screen.getByRole("listbox")).getByRole("option", { name: option }));
+}
+
 describe("TripForm", () => {
   it("starts empty with all 7 request fields", () => {
     setup();
-    expect(screen.getByLabelText(/departure city/i)).toHaveValue("");
-    expect(screen.getByLabelText(/destination country/i)).toHaveValue("");
-    expect(screen.getByLabelText(/start date/i)).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: /departure city/i })).toHaveTextContent("Select a city");
+    expect(screen.getByRole("combobox", { name: /destination country/i })).toHaveTextContent("Select a country");
+    expect(screen.getByRole("button", { name: /start date/i })).toHaveTextContent("Pick a date");
     expect(screen.getByLabelText(/nights/i)).toHaveValue(null);
     expect(screen.getByLabelText(/adults/i)).toHaveValue(null);
     expect(screen.getByLabelText(/children/i)).toHaveValue(null);
     expect(screen.getByLabelText(/budget/i)).toHaveValue("");
   });
 
-  it("lists cities and countries from the options", () => {
+  it("uses custom dropdowns and calendar, not native controls", () => {
     setup();
+    expect(document.querySelector("select")).toBeNull();
+    expect(document.querySelector('input[type="date"]')).toBeNull();
+  });
+
+  it("lists cities and countries from the options", async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole("combobox", { name: /departure city/i }));
     expect(screen.getByRole("option", { name: /Bengaluru \(BLR\)/ })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("combobox", { name: /destination country/i }));
     expect(screen.getByRole("option", { name: "Japan" })).toBeInTheDocument();
   });
 
@@ -58,7 +73,7 @@ describe("TripForm", () => {
   it("marks invalid fields for assistive tech", async () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: /build my holiday/i }));
-    expect(screen.getByLabelText(/departure city/i)).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("combobox", { name: /departure city/i })).toHaveAttribute("aria-invalid", "true");
   });
 
   it("shows one age input per child", async () => {
@@ -85,11 +100,26 @@ describe("TripForm", () => {
     });
   });
 
-  it("shows a date-window message for a return after 20 April", async () => {
-    const { user } = setup();
-    await user.click(screen.getByRole("button", { name: /load menon example/i }));
-    await user.clear(screen.getByLabelText(/start date/i));
-    await user.type(screen.getByLabelText(/start date/i), "2027-04-18");
+  it("picks a departure city and a start date from the custom controls", async () => {
+    const { user, onSubmit } = setup();
+    await pick(user, /departure city/i, "Delhi (DEL)");
+    await pick(user, /destination country/i, "Japan");
+    await user.click(screen.getByRole("button", { name: /start date/i }));
+    await user.click(screen.getByRole("button", { name: "12" }));
+    expect(screen.getByRole("button", { name: /start date/i })).toHaveTextContent("12 April 2027");
+    await user.type(screen.getByLabelText(/nights/i), "6");
+    await user.type(screen.getByLabelText(/adults/i), "1");
+    await user.type(screen.getByLabelText(/budget/i), "100000");
+    await user.click(screen.getByRole("button", { name: /build my holiday/i }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ origin: "DEL", country: "JP", start_date: "2027-04-12", nights: 6 }),
+    );
+  });
+
+  it("shows a date-window message when a date outside the window is supplied", async () => {
+    const { user } = setup({
+      prefill: { origin: "BLR", country: "JP", start_date: "2027-04-25", nights: 6, adults: 2 },
+    });
     await user.click(screen.getByRole("button", { name: /build my holiday/i }));
     expect(screen.getByText(/on or before 20 April 2027/)).toBeInTheDocument();
   });
@@ -97,7 +127,7 @@ describe("TripForm", () => {
   it("clears a field's message when the user edits it", async () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: /build my holiday/i }));
-    await user.selectOptions(screen.getByLabelText(/departure city/i), "BLR");
+    await pick(user, /departure city/i, "Bengaluru (BLR)");
     expect(screen.queryByText("Choose a departure city.")).not.toBeInTheDocument();
   });
 

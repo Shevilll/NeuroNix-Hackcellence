@@ -34,7 +34,8 @@ describe("App options loading", () => {
     vi.stubGlobal("fetch", vi.fn(async () => reply(200, options)));
     render(<App />);
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
-    expect(await screen.findByRole("option", { name: /Bengaluru \(BLR\)/ })).toBeInTheDocument();
+    await userEvent.setup().click(await screen.findByRole("combobox", { name: /departure city/i }));
+    expect(screen.getByRole("option", { name: /Bengaluru \(BLR\)/ })).toBeInTheDocument();
   });
 
   it("shows a clear error with a retry button when options cannot be loaded", async () => {
