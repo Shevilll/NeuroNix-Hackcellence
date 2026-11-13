@@ -16,4 +16,9 @@ describe("QuickRequest", () => {
     expect(onParsed).toHaveBeenCalledWith(expect.objectContaining({ fields: { origin: "BLR", nights: 6 } }));
     expect(await screen.findByRole("status")).toHaveTextContent(/budget/);
   });
+
+  it("turns off browser autofill and history suggestions on the trip description box", () => {
+    render(<QuickRequest onParsed={vi.fn()} />);
+    expect(screen.getByLabelText(/describe your trip/i)).toHaveAttribute("autocomplete", "off");
+  });
 });

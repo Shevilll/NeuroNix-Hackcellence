@@ -171,3 +171,13 @@ def test_spoken_numbers_keep_weeks_and_families(catalog):
     r = parse_quick_request("a family of four with two kids aged 5 and 8", catalog)
     assert r["fields"]["adults"] == 2
     assert r["fields"]["children_ages"] == [5, 8]
+
+
+@pytest.mark.parametrize("text", [
+    "make the start date 10 april 2024", "from Bengaluru to Japan on 2027-03-30", "on 5 May 2027 to Japan",
+    "to Japan starting 2028-01-01",
+])
+def test_date_outside_data_window_is_not_filled(catalog, text):
+    r = parse_quick_request(text, catalog)
+    assert "start_date" not in r["fields"]
+    assert "start_date" in r["missing"]
