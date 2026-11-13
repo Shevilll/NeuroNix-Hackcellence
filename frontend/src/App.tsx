@@ -1,6 +1,8 @@
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import Icon from "./components/Icon";
 import Logo from "./components/Logo";
+import { I18nProvider, useI18n } from "./i18n/I18nProvider";
+import LanguageSwitcher from "./i18n/LanguageSwitcher";
 import CheckPage from "./pages/CheckPage";
 import CreditsPage from "./pages/CreditsPage";
 import PlannerPage from "./pages/PlannerPage";
@@ -9,6 +11,7 @@ import ReservationPage from "./pages/ReservationPage";
 const navClass = ({ isActive }: { isActive: boolean }) => `nav__link${isActive ? " nav__link--active" : ""}`;
 
 function Shell() {
+  const { t } = useI18n();
   return (
     <div className="app">
       <header className="app-header">
@@ -19,15 +22,16 @@ function Shell() {
           </NavLink>
           <nav className="nav" aria-label="Main">
             <NavLink to="/" end className={navClass}>
-              <Icon name="home" /> <span>Plan a trip</span>
+              <Icon name="home" /> <span>{t("nav.plan")}</span>
             </NavLink>
             <NavLink to="/r" className={navClass}>
-              <Icon name="search" /> <span>Bookings</span>
+              <Icon name="search" /> <span>{t("nav.bookings")}</span>
             </NavLink>
             <NavLink to="/check" className={navClass}>
-              <Icon name="shield" /> <span>Check a trip file</span>
+              <Icon name="shield" /> <span>{t("nav.check")}</span>
             </NavLink>
           </nav>
+          <LanguageSwitcher />
         </div>
       </header>
       <Routes>
@@ -44,8 +48,8 @@ function Shell() {
             <Logo size={24} /> Build My Holiday
           </span>
           <span className="site-footer__note">
-            Prices in Indian rupees for everyone travelling. Photos from Wikimedia Commons under free licences:{" "}
-            <NavLink to="/credits">Photo credits</NavLink>
+            {t("foot.note")}{" "}
+            <NavLink to="/credits">{t("foot.credits")}</NavLink>
           </span>
         </div>
       </footer>
@@ -55,8 +59,10 @@ function Shell() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Shell />
-    </BrowserRouter>
+    <I18nProvider>
+      <BrowserRouter>
+        <Shell />
+      </BrowserRouter>
+    </I18nProvider>
   );
 }

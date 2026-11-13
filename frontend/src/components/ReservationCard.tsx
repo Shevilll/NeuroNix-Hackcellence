@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { TripPackage } from "../api/endpoints";
-import { dateRange } from "../lib/format";
+import { useI18n } from "../i18n/I18nProvider";
 import ConfirmDelete from "./ConfirmDelete";
 import Icon from "./Icon";
 
@@ -19,6 +19,7 @@ interface Props {
 
 /** The booked state (M7): the 10-digit number, how to reopen it, and copy / print shortcuts. */
 export default function ReservationCard({ number, pkg, showLink = false, showPrint = false, onDelete, deleting = false }: Props) {
+  const { t, place, dateRange } = useI18n();
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -36,35 +37,34 @@ export default function ReservationCard({ number, pkg, showLink = false, showPri
         <Icon name="check" />
       </span>
       <div className="reservation__body">
-        <p className="eyebrow">Booking confirmed</p>
+        <p className="eyebrow">{t("card.confirmed")}</p>
         <h2 id={`reservation-${number}`}>
-          Reservation <span className="reservation__number">{number}</span>
+          {t("card.reservation")} <span className="reservation__number">{number}</span>
         </h2>
         <p className="muted">
-          {pkg.cities?.join(", ")}
-          {pkg.start_date && pkg.end_date ? ` · ${dateRange(pkg.start_date, pkg.end_date)}` : ""}. Keep this number: it
-          opens the full summary at any time, also after a restart.
+          {pkg.cities?.map(place).join(", ")}
+          {pkg.start_date && pkg.end_date ? ` · ${dateRange(pkg.start_date, pkg.end_date)}` : ""}. {t("card.keep")}
         </p>
         <div className="reservation__actions">
           <button type="button" className="btn btn--secondary btn--sm" onClick={copy}>
-            <Icon name="copy" /> {copied ? "Copied" : "Copy number"}
+            <Icon name="copy" /> {copied ? t("card.copied") : t("card.copy")}
           </button>
           {showLink && (
             <Link className="btn btn--primary btn--sm" to={`/r/${number}`}>
-              Open the summary page <Icon name="arrow" />
+              {t("card.openSummary")} <Icon name="arrow" />
             </Link>
           )}
           {showPrint && (
             <button type="button" className="btn btn--secondary btn--sm" onClick={() => window.print?.()}>
-              <Icon name="printer" /> Print
+              <Icon name="printer" /> {t("card.print")}
             </button>
           )}
           {onDelete && (
             <ConfirmDelete
-              label={`Delete booking ${number}`}
-              text="Delete booking"
-              question="Delete this booking? It gives its seats and rooms back and cannot be undone."
-              confirmText="Yes, delete"
+              label={`${t("card.delete")} ${number}`}
+              text={t("card.delete")}
+              question={t("card.deleteAsk")}
+              confirmText={t("card.deleteYes")}
               busy={deleting}
               onConfirm={onDelete}
             />

@@ -1,7 +1,8 @@
 import { ApiError } from "../api/client";
 
-/** The clearest message an API error carries, or a fallback. */
-export function messageFrom(error: unknown, fallback = "Something went wrong. Please try again."): string {
+/** The clearest message an API error carries, or a fallback. `t` (from useI18n) words the fallbacks in the traveler's language. */
+export function messageFrom(error: unknown, fallback?: string, t?: (key: string) => string): string {
+  fallback ??= t ? t("err.generic") : "Something went wrong. Please try again.";
   if (error instanceof ApiError) {
     const detail = (error.body as { detail?: unknown } | null)?.detail;
     if (typeof detail === "string") return detail;
@@ -14,5 +15,6 @@ export function messageFrom(error: unknown, fallback = "Something went wrong. Pl
     }
     return fallback;
   }
-  return error instanceof TypeError ? "We could not reach the server. Check that the backend is running." : fallback;
+  if (error instanceof TypeError) return t ? t("err.network") : "We could not reach the server. Check that the backend is running.";
+  return fallback;
 }

@@ -26,6 +26,34 @@ CHILD_WORDS = r"(?:children|child|kids?|sons?|daughters?|babies|baby|toddlers?|i
 REQUIRED = ("origin", "country", "start_date", "nights", "adults", "budget")
 
 
+_UNITS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+          "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_ORDINALS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8,
+             "ninth": 9, "tenth": 10, "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14,
+             "fifteenth": 15, "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19, "twentieth": 20,
+             "thirtieth": 30}
+_CARDINAL = r"(?:(?:" + "|".join(_TENS) + r")(?:[\s-]+(?:" + "|".join(_UNITS[1:10]) + r"))?|" + "|".join(_UNITS) + r")"
+
+
+def _cardinal_value(words: str) -> int:
+    parts = re.split(r"[\s-]+", words.lower())
+    return sum(_TENS.get(w, 0) or (_UNITS.index(w) if w in _UNITS else 0) for w in parts)
+
+
+def _spoken(text: str) -> str:
+    """Write spelled-out numbers as digits, the way speech-to-text often leaves them:
+    "tenth of April" -> "10th of April", "three and a half lakh" -> "3.5 lakh", "six nights" -> "6 nights".
+    The words "a" and "an" are left alone (the rules below read them in context)."""
+    tens_ord = r"(?:twenty|thirty)[\s-]+(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)"
+    text = re.sub(r"\b" + tens_ord + r"\b",
+                  lambda m: f"{_TENS[re.split(r'[\s-]+', m.group(0).lower())[0]] + _ORDINALS[re.split(r'[\s-]+', m.group(0).lower())[-1]]}th",
+                  text, flags=re.I)
+    text = re.sub(r"\b(" + "|".join(_ORDINALS) + r")\b", lambda m: f"{_ORDINALS[m.group(1).lower()]}th", text, flags=re.I)
+    text = re.sub(r"\b" + _CARDINAL + r"\b", lambda m: str(_cardinal_value(m.group(0))), text, flags=re.I)
+    return re.sub(r"\b(\d+)\s+and\s+a\s+half\b", lambda m: f"{m.group(1)}.5", text, flags=re.I)
+
+
 def _num(text: str) -> int:
     return int(text) if text.isdigit() else NUMBER_WORDS[text]
 
@@ -37,7 +65,8 @@ def _cut(text: str, span: tuple[int, int]) -> str:
 def _budget(text: str) -> tuple[int | None, str]:
     cue = r"(?:budget|under|within|upto|up to|max(?:imum)?|around|about)?\s*(?:of|is|:)?\s*"
     pattern = re.compile(
-        cue + r"(₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(lakhs?|lacs?|crores?|cr|l|k)?\b", re.I)
+        cue + r"(₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(lakhs?|lacs?|crores?|cr|thousand|l|k)?\b"
+        r"(?:\s*(?:and\s+)?(\d[\d,]*)\s*(thousand|k)?\b)?", re.I)
     for m in pattern.finditer(text):
         word = text[m.start():m.end()].lower()
         symbol, raw, unit = m.group(1), m.group(2), (m.group(3) or "").lower()
@@ -49,10 +78,14 @@ def _budget(text: str) -> tuple[int | None, str]:
             value *= 100_000
         elif unit in ("crore", "crores", "cr"):
             value *= 10_000_000
-        elif unit == "k":
+        elif unit in ("k", "thousand"):
             value *= 1_000
         elif not (symbol or has_cue):
             continue
+        if unit in ("lakh", "lakhs", "lac", "lacs", "l", "crore", "crores", "cr") and m.group(4):
+            extra = float(m.group(4).replace(",", "")) * (1_000 if m.group(5) else 1)
+            if 1_000 <= extra < (10_000_000 if unit.startswith("cr") else 100_000):
+                value += extra
         if value < 1_000:  # a bare "6" after "budget" is almost surely not rupees
             continue
         return int(round(value)), _cut(text, m.span())
@@ -82,9 +115,9 @@ def _nights(text: str) -> tuple[int | None, str]:
     m = re.search(r"\b" + _NUM + r"\s*-?\s*(?:nights?|days?)\b", text, re.I)
     if m:
         return _num(m.group(1).lower()), _cut(text, m.span())
-    m = re.search(r"\b(a|one|two)\s+weeks?\b", text, re.I)
+    m = re.search(r"\b(a|one|two|1|2)\s+weeks?\b", text, re.I)
     if m:
-        return 7 * NUMBER_WORDS[m.group(1).lower()], _cut(text, m.span())
+        return 7 * _num(m.group(1).lower()) if m.group(1).isdigit() else 7 * NUMBER_WORDS[m.group(1).lower()], _cut(text, m.span())
     m = re.search(r"\bweekend\b", text, re.I)
     if m:
         return 3, _cut(text, m.span())
@@ -129,7 +162,7 @@ def _children(text: str) -> tuple[list[int] | None, bool, str]:
             text = _cut(text, m.span())
     if not re.search(r"\b" + CHILD_WORDS + r"\b", text, re.I):
         return (ages or None), bool(ages), text
-    for m in re.finditer(r"\b" + CHILD_WORDS + r"\b[\s,]*(?:aged?|of|who are|is|are)?[\s:,]*"
+    for m in re.finditer(r"\b" + CHILD_WORDS + r"\b[\s,]*(?:aged?|of age|of|who are|is|are)?[\s:,]*"
                          r"(\d{1,2}(?:\s*(?:,|and|&)\s*\d{1,2})*)\b(?!\s*(?:nights?|days?|adults?|lakhs?|k\b|l\b))",
                          text, re.I):
         ages += [int(n) for n in re.findall(r"\d+", m.group(1))]
@@ -158,7 +191,7 @@ def _adults(text: str) -> int | None:
 
 
 def parse_quick_request(text: str, catalog: Catalog) -> dict[str, Any]:
-    text = (text or "")[:1000]
+    text = _spoken((text or "")[:1000])
     fields: dict[str, Any] = {}
     year = catalog.rules.first_night.year
 

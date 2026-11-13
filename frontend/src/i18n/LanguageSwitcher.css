@@ -1,0 +1,70 @@
+/* The language picker sits in the blue header, so it uses the header's on-primary colours. */
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--on-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.lang-switch__label {
+  white-space: nowrap;
+}
+
+.lang-switch__field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.lang-switch__chevron {
+  position: absolute;
+  right: 14px;
+  display: inline-flex;
+  pointer-events: none;
+}
+
+.lang-switch__chevron svg {
+  width: 18px;
+  height: 18px;
+}
+
+.lang-switch__select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 40px;
+  max-width: 11rem;
+  padding: 0 40px 0 18px;
+  border: 1px solid var(--on-primary);
+  border-radius: 999px;
+  background: var(--blue-700);
+  color: var(--on-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lang-switch__select:hover {
+  background: var(--blue-900);
+}
+
+.lang-switch__select:focus-visible {
+  outline: 2px solid var(--on-primary);
+  outline-offset: 2px;
+}
+
+/* The open list is drawn by the browser on a white surface, so its text must be dark. */
+.lang-switch__select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .lang-switch__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+}

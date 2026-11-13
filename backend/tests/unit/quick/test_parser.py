@@ -131,3 +131,43 @@ def test_year_old_phrases(catalog, text, adults, ages):
 def test_menon_in_natural_words(catalog):
     r = parse_quick_request("2 adults and a 6 year old from Bengaluru to Japan 10 April, 6 nights, budget 3.5 lakh", catalog)
     assert r["fields"]["children_ages"] == [6] and r["fields"]["nights"] == 6 and r["missing"] == []
+
+
+# ----- Sentences as a browser's speech-to-text writes them (voice input feeds this same parser)
+
+
+@pytest.mark.parametrize(("text", "budget"), [
+    ("budget 3 lakh 50 thousand", 350000), ("budget 3 lakh 50,000", 350000), ("budget 3 lakh and 50 thousand", 350000),
+    ("budget three and a half lakh", 350000), ("budget two lakh", 200000), ("budget 350 thousand", 350000),
+    ("budget 2 lakh rupees", 200000),
+])
+def test_spoken_budgets(catalog, text, budget):
+    assert parse_quick_request(text, catalog)["fields"]["budget"] == budget
+
+
+@pytest.mark.parametrize(("text", "ages"), [
+    ("2 adults and one child aged six", [6]), ("2 adults, children aged six and nine", [6, 9]),
+    ("2 adults and one kid of age 7", [7]), ("2 adults and a six year old", [6]),
+    ("two adults and two kids aged 4 and 12", [4, 12]),
+])
+def test_spoken_child_ages(catalog, text, ages):
+    r = parse_quick_request(text, catalog)
+    assert r["fields"]["children_ages"] == ages
+    assert r["fields"]["adults"] == 2
+    assert r["unclear"] == []
+
+
+def test_spoken_menon_sentence(catalog):
+    r = parse_quick_request(
+        "two adults and one child aged six from Bangalore to Japan on the tenth of April for six nights "
+        "with a budget of three and a half lakh", catalog)
+    assert r["fields"] == {"origin": "BLR", "country": "Japan", "start_date": "2027-04-10", "nights": 6,
+                           "adults": 2, "children_ages": [6], "budget": 350000}
+
+
+def test_spoken_numbers_keep_weeks_and_families(catalog):
+    assert parse_quick_request("one week", catalog)["fields"]["nights"] == 7
+    assert parse_quick_request("two weeks", catalog)["fields"]["nights"] == 14
+    r = parse_quick_request("a family of four with two kids aged 5 and 8", catalog)
+    assert r["fields"]["adults"] == 2
+    assert r["fields"]["children_ages"] == [5, 8]

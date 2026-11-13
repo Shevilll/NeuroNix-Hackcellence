@@ -31,6 +31,21 @@
   --error: #c0392b;
   --error-bg: #fdecea;
 
+  /* Package identification palette: one accent per package kind (text/icon, soft tint, edge).
+     Distinct from the status colours above, which stay reserved for rule checks and errors. */
+  --kind-recommended: #003b95;
+  --kind-recommended-bg: #ebf3ff;
+  --kind-recommended-edge: #8fbcf5;
+  --kind-cheapest: #0a6b66;
+  --kind-cheapest-bg: #e3f5f3;
+  --kind-cheapest-edge: #7fcdc6;
+  --kind-fastest: #5a35c0;
+  --kind-fastest-bg: #f0ebfc;
+  --kind-fastest-edge: #b9a4ee;
+  --kind-best-rated: #a61b5f;
+  --kind-best-rated-bg: #fcebf3;
+  --kind-best-rated-edge: #ecaac8;
+
   /* Shape, depth, layout */
   --radius: 8px;
   --radius-lg: 14px;

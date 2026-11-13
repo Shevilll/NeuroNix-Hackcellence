@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatLongDate } from "../domain/requestValidation";
+import { useI18n } from "../i18n/I18nProvider";
 import "./controls.css";
 import "./DatePicker.css";
 
@@ -16,7 +17,11 @@ interface Props {
   describedBy?: string;
 }
 
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const WEEKDAYS: Record<string, string[]> = {
+  en: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
+  hi: ["र", "सो", "मं", "बु", "गु", "शु", "श"],
+};
+const HINDI_MONTHS = ["जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर"];
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -39,6 +44,8 @@ function shiftMonth(year: number, month: number, delta: number) {
 
 /** Custom calendar that replaces the native date input. Days outside min..max are disabled. */
 export default function DatePicker({ id, labelledBy, value, min, max, onChange, invalid, describedBy }: Props) {
+  const { t, lang } = useI18n();
+  const monthName = (m: number) => (lang === "hi" ? HINDI_MONTHS : MONTH_NAMES)[m - 1];
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => yearMonth(value || min));
   const rootRef = useRef<HTMLDivElement>(null);
@@ -117,7 +124,7 @@ export default function DatePicker({ id, labelledBy, value, min, max, onChange, 
           id={valueId}
           className={value ? "control__value" : "control__value control__value--placeholder"}
         >
-          {value ? formatLongDate(value) : "Pick a date"}
+          {value ? formatLongDate(value, lang) : t("dp.pick")}
         </span>
         <svg className="control__icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -126,24 +133,24 @@ export default function DatePicker({ id, labelledBy, value, min, max, onChange, 
       </button>
 
       {open && (
-        <div ref={dialogRef} role="dialog" aria-label="Choose a date" className="control__panel date-picker">
+        <div ref={dialogRef} role="dialog" aria-label={t("dp.choose")} className="control__panel date-picker">
           <div className="date-picker__head">
             <button
               type="button"
               className="date-picker__nav"
-              aria-label="Previous month"
+              aria-label={t("dp.prev")}
               disabled={!canGoBack}
               onClick={() => setView((v) => shiftMonth(v.year, v.month, -1))}
             >
               <span aria-hidden="true">‹</span>
             </button>
             <div className="date-picker__title" aria-live="polite">
-              {MONTH_NAMES[view.month - 1]} {view.year}
+              {monthName(view.month)} {view.year}
             </div>
             <button
               type="button"
               className="date-picker__nav"
-              aria-label="Next month"
+              aria-label={t("dp.next")}
               disabled={!canGoForward}
               onClick={() => setView((v) => shiftMonth(v.year, v.month, 1))}
             >
@@ -151,8 +158,8 @@ export default function DatePicker({ id, labelledBy, value, min, max, onChange, 
             </button>
           </div>
 
-          <div className="date-picker__grid" role="group" aria-label={`${MONTH_NAMES[view.month - 1]} ${view.year}`}>
-            {WEEKDAYS.map((w) => (
+          <div className="date-picker__grid" role="group" aria-label={`${monthName(view.month)} ${view.year}`}>
+            {(WEEKDAYS[lang] ?? WEEKDAYS.en).map((w) => (
               <span key={w} className="date-picker__weekday" aria-hidden="true">
                 {w}
               </span>

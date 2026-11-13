@@ -1,4 +1,5 @@
 import type { TripOptions, TripRequest } from "../api/types";
+import { translate } from "../i18n/messages";
 
 /** Raw text values straight from the form inputs. */
 export interface FormValues {
@@ -15,8 +16,16 @@ export type FormErrors = Partial<Record<"origin" | "country" | "startDate" | "ni
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-export function formatLongDate(iso: string): string {
+/** "2027-04-01" -> "1 April 2027"; in another language the browser writes the month name for it. */
+export function formatLongDate(iso: string, lang = "en"): string {
   const [y, m, d] = iso.split("-").map(Number);
+  if (lang !== "en") {
+    try {
+      return new Intl.DateTimeFormat(`${lang}-IN`, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
+    } catch {
+      /* an unsupported locale: use the English form below */
+    }
+  }
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
@@ -35,50 +44,53 @@ export function parseBudget(s: string): number {
   return /^\d+(\.\d+)?$/.test(cleaned) ? Number(cleaned) : NaN;
 }
 
-export function validateForm(v: FormValues, options: TripOptions): FormErrors {
+/** Says a message in the traveler's language. The default is English, so callers that pass nothing are unchanged. */
+export type Say = (key: string, vars?: Record<string, string | number>) => string;
+
+export function validateForm(v: FormValues, options: TripOptions, t: Say = (key, vars) => translate("en", key, vars), lang = "en"): FormErrors {
   const errors: FormErrors = {};
   const { rules } = options;
 
-  if (!v.origin) errors.origin = "Choose a departure city.";
+  if (!v.origin) errors.origin = t("err.origin");
   else if (!options.departure_cities.some((c) => c.airport === v.origin))
-    errors.origin = "Choose a departure city from the list.";
+    errors.origin = t("err.originList");
 
-  if (!v.country) errors.country = "Choose a destination country.";
+  if (!v.country) errors.country = t("err.country");
   else if (!options.countries.some((c) => c.code === v.country))
-    errors.country = "Choose a destination country from the list.";
+    errors.country = t("err.countryList");
 
   const nights = isWholeNumber(v.nights) ? Number(v.nights) : NaN;
   if (!v.nights.trim() || !(nights >= rules.min_nights && nights <= rules.max_nights))
-    errors.nights = `Nights must be a whole number between ${rules.min_nights} and ${rules.max_nights}.`;
+    errors.nights = t("err.nights", { min: rules.min_nights, max: rules.max_nights });
 
   const start = parseIso(v.startDate);
-  if (!v.startDate) errors.startDate = "Choose the holiday start date.";
-  else if (!start) errors.startDate = "Enter a valid date.";
+  if (!v.startDate) errors.startDate = t("err.startDate");
+  else if (!start) errors.startDate = t("err.dateInvalid");
   else {
     const first = parseIso(rules.data_window.first_night)!;
     const last = parseIso(rules.data_window.last_departure)!;
     if (start < first)
-      errors.startDate = `The first night must be on or after ${formatLongDate(rules.data_window.first_night)}.`;
+      errors.startDate = t("err.dateFirst", { date: formatLongDate(rules.data_window.first_night, lang) });
     else if (!Number.isNaN(nights) && !errors.nights) {
       const end = new Date(start.getTime() + nights * 86_400_000);
       if (end > last)
-        errors.startDate = `The return flight must be on or before ${formatLongDate(rules.data_window.last_departure)}. Start earlier or choose fewer nights.`;
+        errors.startDate = t("err.dateLast", { date: formatLongDate(rules.data_window.last_departure, lang) });
     }
   }
 
   const adults = isWholeNumber(v.adults) ? Number(v.adults) : NaN;
-  if (!(adults >= 1)) errors.adults = "At least 1 adult is required.";
+  if (!(adults >= 1)) errors.adults = t("err.adults");
 
   const agesBad = v.childAges.some((a) => !a.trim());
   const ages = v.childAges.map((a) => (isWholeNumber(a) ? Number(a) : NaN));
-  if (agesBad) errors.childAges = "Enter the age of every child.";
-  else if (ages.some((a) => !(a >= 0 && a <= 17))) errors.childAges = "Child ages must be whole numbers between 0 and 17.";
+  if (agesBad) errors.childAges = t("err.agesAll");
+  else if (ages.some((a) => !(a >= 0 && a <= 17))) errors.childAges = t("err.agesRange");
 
   if (!errors.adults && !errors.childAges && adults + ages.length > rules.max_travelers)
-    errors.adults = `No flight has seats for more than ${rules.max_travelers} travelers.`;
+    errors.adults = t("err.seats", { max: rules.max_travelers });
 
   const budget = parseBudget(v.budget);
-  if (!(budget > 0) || !Number.isFinite(budget)) errors.budget = "Enter a budget greater than 0 (in INR).";
+  if (!(budget > 0) || !Number.isFinite(budget)) errors.budget = t("err.budget");
 
   return errors;
 }

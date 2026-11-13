@@ -210,6 +210,32 @@ a.btn {
   box-shadow: 0 0 0 1px var(--blue-600), var(--shadow-lg);
 }
 
+/* Identification palette: each package kind gets its own accent from tokens.css. */
+.picker__tab[data-kind] {
+  --kind: var(--blue-600);
+  --kind-bg: var(--blue-50);
+  --kind-edge: var(--blue-600);
+  border-top: 4px solid var(--kind-edge);
+}
+.picker__tab[data-kind="recommended"] { --kind: var(--kind-recommended); --kind-bg: var(--kind-recommended-bg); --kind-edge: var(--kind-recommended-edge); }
+.picker__tab[data-kind="cheapest"] { --kind: var(--kind-cheapest); --kind-bg: var(--kind-cheapest-bg); --kind-edge: var(--kind-cheapest-edge); }
+.picker__tab[data-kind="fastest"] { --kind: var(--kind-fastest); --kind-bg: var(--kind-fastest-bg); --kind-edge: var(--kind-fastest-edge); }
+.picker__tab[data-kind="best-rated"] { --kind: var(--kind-best-rated); --kind-bg: var(--kind-best-rated-bg); --kind-edge: var(--kind-best-rated-edge); }
+
+.picker__tab[data-kind]:hover {
+  border-color: var(--kind-edge);
+}
+
+.picker__tab[data-kind].picker__tab--active {
+  border-color: var(--kind);
+  background: var(--kind-bg);
+  box-shadow: 0 0 0 1px var(--kind), var(--shadow-lg);
+}
+
+.picker__tab[data-kind] .picker__label {
+  color: var(--kind);
+}
+
 .picker__top {
   display: flex;
   align-items: center;
@@ -587,6 +613,21 @@ a.btn {
   min-height: 48px;
 }
 
+/* The hero is blue-900, so the default primary hover would blend into it. */
+.hero .lookup .btn--primary {
+  background: var(--blue-600);
+}
+
+.hero .lookup .btn--primary:hover {
+  background: var(--blue-700);
+  border-color: var(--on-primary);
+}
+
+.hero .lookup .btn--primary:focus-visible {
+  outline: 3px solid var(--blue-200);
+  outline-offset: 2px;
+}
+
 .lookup__error {
   flex-basis: 100%;
   margin: 0;
@@ -846,6 +887,21 @@ a.btn {
   gap: 8px;
 }
 
+@media (min-width: 640px) {
+  .bookings .confirm-delete {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .bookings .confirm-delete__question {
+    align-items: center;
+  }
+  .bookings .confirm-delete__actions {
+    flex-shrink: 0;
+  }
+}
+
 .page-notice {
   display: flex;
   align-items: center;
@@ -874,7 +930,7 @@ a.btn {
 }
 
 .bookings__head .confirm-delete {
-  max-width: 420px;
+  flex: 1 1 100%;
 }
 
 .bookings__title {
@@ -954,13 +1010,39 @@ a.btn {
 
 @media (min-width: 880px) {
   .booking {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    grid-template-areas: "main total actions";
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas: "main total open remove";
     align-items: center;
   }
   .booking__actions {
-    justify-content: flex-end;
-    max-width: 360px;
+    display: contents;
+  }
+  .booking__actions > a.btn {
+    grid-area: open;
+  }
+  .booking__actions > button.btn,
+  .booking__actions > .confirm-delete {
+    grid-area: remove;
+  }
+}
+
+/* Asking "are you sure": the row keeps its details and the question takes a full-width band below. */
+.booking__actions .confirm-delete {
+  flex: 1 1 100%;
+}
+
+@media (min-width: 880px) {
+  .booking:has(.confirm-delete) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "main total"
+      "confirm confirm";
+  }
+  .booking:has(.confirm-delete) .booking__actions > a.btn {
+    display: none;
+  }
+  .booking:has(.confirm-delete) .booking__actions > .confirm-delete {
+    grid-area: confirm;
   }
 }
 

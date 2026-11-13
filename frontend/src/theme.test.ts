@@ -20,4 +20,12 @@ describe("design tokens (Booking Holdings look: light theme only)", () => {
     expect(css).toMatch(/--surface:\s*#ffffff/i);
     expect(css).toMatch(/--text:\s*#1a1a1a/i);
   });
+
+  it("declares an identification palette (accent, tint, edge) for each package kind", () => {
+    for (const kind of ["recommended", "cheapest", "fastest", "best-rated"]) {
+      for (const part of ["", "-bg", "-edge"]) {
+        expect(css).toContain(`--kind-${kind}${part}:`);
+      }
+    }
+  });
 });

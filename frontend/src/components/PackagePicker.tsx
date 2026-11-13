@@ -1,6 +1,7 @@
 import { useRef, type KeyboardEvent } from "react";
 import type { TripPackage } from "../api/endpoints";
 import { duration, inr } from "../lib/format";
+import { useI18n } from "../i18n/I18nProvider";
 import CityRoute from "./CityRoute";
 import Icon, { type IconName } from "./Icon";
 
@@ -11,14 +12,7 @@ export interface PackageChoice {
   package: TripPackage;
 }
 
-const ABOUT: Record<string, { icon: IconName; text: string }> = {
-  recommended: { icon: "shield", text: "Most to see" },
-  cheapest: { icon: "wallet", text: "Lowest price" },
-  fastest: { icon: "clock", text: "Least travel time" },
-  best_rated: { icon: "star", text: "Top hotel stars" },
-};
-
-const stars = (n: number) => `${Number(n.toFixed(1))} stars`;
+const ICONS: Record<string, IconName> = { recommended: "shield", cheapest: "wallet", fastest: "clock", best_rated: "star" };
 
 interface Props {
   choices: PackageChoice[];
@@ -29,6 +23,7 @@ interface Props {
 
 /** G4: the traveler picks one of the packages. A tab list, so arrow keys move between them. */
 export default function PackagePicker({ choices, value, budget, onPick }: Props) {
+  const { t } = useI18n();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
   function onKeyDown(event: KeyboardEvent, index: number) {
@@ -41,17 +36,18 @@ export default function PackagePicker({ choices, value, budget, onPick }: Props)
   }
 
   return (
-    <div className="picker" role="tablist" aria-label="Package choices">
+    <div className="picker" role="tablist" aria-label={t("pk.aria")}>
       {choices.map((c, i) => {
         const p = c.package;
         const selected = c.key === value;
-        const about = ABOUT[c.key];
+        const icon = ICONS[c.key];
         return (
           <button
             key={c.key}
             ref={(el) => (refs.current[i] = el)}
             type="button"
             role="tab"
+            data-kind={c.key.replace(/_/g, "-")}
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
             className={`picker__tab${selected ? " picker__tab--active" : ""}`}
@@ -60,19 +56,19 @@ export default function PackagePicker({ choices, value, budget, onPick }: Props)
           >
             <span className="picker__top">
               <span className="picker__label">
-                {about && <Icon name={about.icon} />}
+                {icon && <Icon name={icon} />}
                 {c.label}
               </span>
-              {p.total_inr > budget && <span className="picker__flag">Over budget</span>}
+              {p.total_inr > budget && <span className="picker__flag">{t("pk.over")}</span>}
             </span>
-            {about && <span className="picker__about">{about.text}</span>}
+            {icon && <span className="picker__about">{t(`pk.${c.key}.sub`)}</span>}
             <span className="picker__price">{inr(p.total_inr)}</span>
             <span className="picker__route">
               <CityRoute cities={p.cities} nights={p.nights_per_city} />
             </span>
             <span className="picker__meta">
-              {p.travel_minutes !== undefined && <span>{duration(p.travel_minutes)} travel</span>}
-              {p.avg_stars !== undefined && <span>{stars(p.avg_stars)}</span>}
+              {p.travel_minutes !== undefined && <span>{t("pk.travel", { time: duration(p.travel_minutes) })}</span>}
+              {p.avg_stars !== undefined && <span>{t("pk.stars", { n: Number(p.avg_stars.toFixed(1)) })}</span>}
             </span>
           </button>
         );

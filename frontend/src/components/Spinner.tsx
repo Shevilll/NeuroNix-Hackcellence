@@ -1,3 +1,4 @@
+import { useI18n } from "../i18n/I18nProvider";
 import "./Spinner.css";
 
 interface Props {
@@ -17,12 +18,13 @@ function Arc() {
   );
 }
 
-export default function Spinner({ label = "Loading", showLabel = false, decorative = false }: Props) {
+export default function Spinner({ label, showLabel = false, decorative = false }: Props) {
+  const { t } = useI18n();
   if (decorative) return <Arc />;
   return (
     <span role="status" className="spinner-wrap">
       <Arc />
-      <span className={showLabel ? "spinner-label" : "sr-only"}>{label}</span>
+      <span className={showLabel ? "spinner-label" : "sr-only"}>{label ?? t("c.loading")}</span>
     </span>
   );
 }

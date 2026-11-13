@@ -10,9 +10,11 @@ import {
   type TripPackage,
 } from "../api/endpoints";
 import { messageFrom } from "../lib/errors";
-import { inr, shortDate, signedInr, timeOf } from "../lib/format";
+import { inr, timeOf } from "../lib/format";
 import CityRoute from "./CityRoute";
+import { useI18n } from "../i18n/I18nProvider";
 import Icon from "./Icon";
+import Spinner from "./Spinner";
 
 export interface ChangeReport {
   price_diff_inr: number;
@@ -56,6 +58,7 @@ async function apply(id: string, pkg: TripPackage, change: Record<string, unknow
  * the current choice. Choosing one asks the backend to re-check the whole package (M6).
  */
 export default function ChangeOptions({ id, pkg, kind, params, date, title, onChanged, onClose }: Props) {
+  const { t, ts, count, shortDate, signedInr } = useI18n();
   const [options, setOptions] = useState<ChangeOption[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +71,7 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
     setLoadError(null);
     getOptions2(id, kind, params).then(
       (list) => live && setOptions(list),
-      (e) => live && setLoadError(messageFrom(e, "Could not load the options.")),
+      (e) => live && setLoadError(ts(messageFrom(e, t("opt.loadFail"), t))),
     );
     return () => {
       live = false;
@@ -88,7 +91,7 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
       const r = await apply(id, pkg, changeFor(kind, params, o));
       onChanged(r.pkg, r.report);
     } catch (e) {
-      setError(messageFrom(e, "That change was refused."));
+      setError(ts(messageFrom(e, t("c.refused"), t)));
     } finally {
       setBusy(null);
     }
@@ -98,12 +101,12 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
     <div className="change-panel" role="group" aria-label={title}>
       <div className="change-panel__head">
         <h4>{title}</h4>
-        <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+        <button type="button" className="icon-btn" aria-label={t("c.close")} onClick={onClose}>
           <Icon name="cross" />
         </button>
       </div>
       <p className="change-panel__hint">
-        Every option below keeps all travel rules true. The price shows the difference to your current choice.
+        {t("opt.hint")}
       </p>
       {error && (
         <p role="alert" className="inline-error">
@@ -111,8 +114,8 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
         </p>
       )}
       {loadError && <p className="inline-error">{loadError}</p>}
-      {!options && !loadError && <p className="muted">Finding options that keep every rule…</p>}
-      {options && shown.length === 0 && <p className="muted">No other valid options for this part of the trip.</p>}
+      {!options && !loadError && <Spinner label={t("opt.finding")} showLabel />}
+      {options && shown.length === 0 && <p className="muted">{t("opt.none")}</p>}
       {shown.length > 0 && (
         <ul className="option-list">
           {shown.map((o, i) => (
@@ -123,19 +126,20 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
                   {o.stars !== undefined && (
                     <span className="option__stars">
                       <Icon name="star" />
-                      {`${o.stars} stars`}
+                      {t("pk.stars", { n: o.stars })}
                     </span>
                   )}
                   {o.area && <span>{o.area}</span>}
-                  {o.rating !== undefined && <span>{`Guest rating ${o.rating}`}</span>}
-                  {o.rooms !== undefined && <span>{o.rooms === 1 ? "1 room" : `${o.rooms} rooms`}</span>}
-                  {o.depart && <span>{`Departs ${shortDate(o.depart)} ${timeOf(o.depart) ?? ""}`}</span>}
-                  {o.arrive && <span>{`Lands ${shortDate(o.arrive)} ${timeOf(o.arrive) ?? ""}`}</span>}
+                  {o.rating !== undefined && <span>{t("opt.rating", { n: o.rating })}</span>}
+                  {o.rooms !== undefined && <span>{count("room", o.rooms)}</span>}
+                  {o.depart && <span>{t("opt.departs", { date: shortDate(o.depart), time: timeOf(o.depart) ?? "" })}</span>}
+                  {o.arrive && <span>{t("opt.lands", { date: shortDate(o.arrive), time: timeOf(o.arrive) ?? "" })}</span>}
                 </span>
               </div>
               <span className={diffClass(o.price_diff)}>{signedInr(o.price_diff)}</span>
               <button type="button" className="btn btn--secondary btn--sm" disabled={busy !== null} onClick={() => choose(o, i)}>
-                {busy === i ? "Checking…" : "Choose"}
+                {busy === i && <Spinner decorative />}
+                {busy === i ? t("c.checking") : t("c.choose")}
               </button>
             </li>
           ))}
@@ -147,6 +151,7 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
 
 /** G3: every valid city plan for the same request, with its total. Choosing one rebuilds the package. */
 export function CityPlanOptions({ id, pkg, onChanged, onClose }: Omit<Props, "kind" | "params" | "date" | "title">) {
+  const { t, ts, signedInr } = useI18n();
   const [plans, setPlans] = useState<CityPlan[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
@@ -155,7 +160,7 @@ export function CityPlanOptions({ id, pkg, onChanged, onClose }: Omit<Props, "ki
     let live = true;
     getCityPlans(id).then(
       (p) => live && setPlans(p),
-      (e) => live && setError(messageFrom(e, "Could not load the city plans.")),
+      (e) => live && setError(ts(messageFrom(e, t("opt.plansFail"), t))),
     );
     return () => {
       live = false;
@@ -169,27 +174,27 @@ export function CityPlanOptions({ id, pkg, onChanged, onClose }: Omit<Props, "ki
       const r = await apply(id, pkg, { op: "change_cities", cities: plan.cities, nights_per_city: plan.nights_per_city });
       onChanged(r.pkg, r.report);
     } catch (e) {
-      setError(messageFrom(e, "That city plan could not be built."));
+      setError(ts(messageFrom(e, t("opt.planFail"), t)));
     } finally {
       setBusy(null);
     }
   }
 
   return (
-    <div className="change-panel" role="group" aria-label="Choose other cities">
+    <div className="change-panel" role="group" aria-label={t("opt.chooseCities")}>
       <div className="change-panel__head">
-        <h4>Choose other cities</h4>
-        <button type="button" className="icon-btn" aria-label="Close" onClick={onClose}>
+        <h4>{t("opt.chooseCities")}</h4>
+        <button type="button" className="icon-btn" aria-label={t("c.close")} onClick={onClose}>
           <Icon name="cross" />
         </button>
       </div>
-      <p className="change-panel__hint">Every plan below was built with real flights, rooms and transfers for your dates.</p>
+      <p className="change-panel__hint">{t("opt.plansHint")}</p>
       {error && (
         <p role="alert" className="inline-error">
           <Icon name="warning" /> {error}
         </p>
       )}
-      {!plans && !error && <p className="muted">Building every city plan…</p>}
+      {!plans && !error && <Spinner label={t("opt.buildingPlans")} showLabel />}
       {plans && (
         <ul className="option-list">
           {plans.map((p, i) => (
@@ -200,15 +205,16 @@ export function CityPlanOptions({ id, pkg, onChanged, onClose }: Omit<Props, "ki
                 </span>
                 <span className="option__meta">
                   <span>{inr(p.total_inr)}</span>
-                  {!p.within_budget && <span className="text-warn">Over budget</span>}
+                  {!p.within_budget && <span className="text-warn">{t("pk.over")}</span>}
                 </span>
               </div>
               <span className={diffClass(p.total_inr - pkg.total_inr)}>{signedInr(p.total_inr - pkg.total_inr)}</span>
               {p.current ? (
-                <span className="tag">Current plan</span>
+                <span className="tag">{t("opt.current")}</span>
               ) : (
                 <button type="button" className="btn btn--secondary btn--sm" disabled={busy !== null} onClick={() => choose(p, i)}>
-                  {busy === i ? "Building…" : "Choose"}
+                  {busy === i && <Spinner decorative />}
+                  {busy === i ? t("c.building") : t("c.choose")}
                 </button>
               )}
             </li>

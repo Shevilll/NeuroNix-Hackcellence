@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { deleteAllReservations, deleteReservation, type BookingSummary } from "../api/endpoints";
-import { dateRange, inr, plural } from "../lib/format";
+import { useI18n } from "../i18n/I18nProvider";
+import { inr } from "../lib/format";
 import CityRoute from "./CityRoute";
 import ConfirmDelete from "./ConfirmDelete";
 import Icon from "./Icon";
@@ -12,15 +13,16 @@ interface Props {
   onDeleted: (numbers: string[], message: string) => void;
 }
 
-function travellers(b: BookingSummary) {
+function travellers(b: BookingSummary, count: (unit: string, n: number) => string) {
   if (b.adults == null) return null;
-  return [plural(b.adults, "adult"), b.children ? (b.children === 1 ? "1 child" : `${b.children} children`) : null]
+  return [count("adult", b.adults), b.children ? count("child", b.children) : null]
     .filter(Boolean)
     .join(", ");
 }
 
 /** Every booking in the database, each with Open and Delete, and Delete all for a clean demo. */
 export default function BookingsList({ bookings, onDeleted }: Props) {
+  const { t, count, place, dateRange } = useI18n();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +32,7 @@ export default function BookingsList({ bookings, onDeleted }: Props) {
     try {
       await action();
     } catch {
-      setError("We could not delete that. Check that the backend is running, then try again.");
+      setError(t("bk.fail"));
     } finally {
       setBusy(null);
     }
@@ -39,15 +41,15 @@ export default function BookingsList({ bookings, onDeleted }: Props) {
   const removeOne = (number: string) =>
     run(number, async () => {
       await deleteReservation(number);
-      onDeleted([number], `Booking ${number} was deleted. Its seats and rooms are free again.`);
+      onDeleted([number], t("rv.deleted", { n: number }));
     });
 
   const removeAll = () =>
     run("all", async () => {
-      const count = await deleteAllReservations();
+      const deletedCount = await deleteAllReservations();
       onDeleted(
         bookings.map((b) => b.reservation_number),
-        `${plural(count, "booking")} ${count === 1 ? "was" : "were"} deleted. Every seat and room is free again.`,
+        t(`bk.allDeleted.${deletedCount === 1 ? "one" : "other"}`, { n: deletedCount }),
       );
     });
 
@@ -55,13 +57,13 @@ export default function BookingsList({ bookings, onDeleted }: Props) {
     <section className="card bookings" aria-labelledby="bookings-title">
       <div className="bookings__head">
         <h2 id="bookings-title" className="bookings__title">
-          All bookings ({bookings.length})
+          {t("bk.title", { n: bookings.length })}
         </h2>
         <ConfirmDelete
-          label="Delete all bookings"
-          text="Delete all"
-          question={`Delete all ${plural(bookings.length, "booking")}? Every seat and room goes back. This cannot be undone.`}
-          confirmText="Yes, delete all"
+          label={t("bk.deleteAllLabel")}
+          text={t("bk.deleteAll")}
+          question={t("bk.deleteAllAsk", { bookings: count("booking", bookings.length) })}
+          confirmText={t("bk.deleteAllYes")}
           busy={busy === "all"}
           onConfirm={removeAll}
         />
@@ -73,7 +75,7 @@ export default function BookingsList({ bookings, onDeleted }: Props) {
       )}
       <ul className="bookings__list">
         {bookings.map((b) => {
-          const who = travellers(b);
+          const who = travellers(b, count);
           return (
             <li key={b.reservation_number} className="booking">
               <div className="booking__main">
@@ -94,21 +96,21 @@ export default function BookingsList({ bookings, onDeleted }: Props) {
                   )}
                   {b.country && (
                     <span>
-                      <Icon name="pin" /> {b.country}
+                      <Icon name="pin" /> {place(b.country)}
                     </span>
                   )}
                 </span>
               </div>
               <span className="booking__total">{inr(b.total_inr)}</span>
               <div className="booking__actions">
-                <Link className="btn btn--secondary btn--sm" to={`/r/${b.reservation_number}`} aria-label={`Open booking ${b.reservation_number}`}>
-                  Open <Icon name="arrow" />
+                <Link className="btn btn--secondary btn--sm" to={`/r/${b.reservation_number}`} aria-label={t("bk.openLabel", { n: b.reservation_number })}>
+                  {t("c.open")} <Icon name="arrow" />
                 </Link>
                 <ConfirmDelete
-                  label={`Delete booking ${b.reservation_number}`}
-                  text="Delete"
-                  question="Delete this booking? It gives its seats and rooms back and cannot be undone."
-                  confirmText="Yes, delete"
+                  label={`${t("card.delete")} ${b.reservation_number}`}
+                  text={t("c.delete")}
+                  question={t("card.deleteAsk")}
+                  confirmText={t("card.deleteYes")}
                   busy={busy === b.reservation_number}
                   onConfirm={() => removeOne(b.reservation_number)}
                 />

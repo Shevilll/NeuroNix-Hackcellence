@@ -65,7 +65,7 @@ describe("/r without a number", () => {
     vi.stubGlobal("fetch", vi.fn(stubApi()));
     window.history.pushState({}, "", "/r");
     render(<App />);
-    const help = screen.getByRole("region", { name: /where to find your number/i });
+    const help = await screen.findByRole("region", { name: /where to find your number/i });
     expect(help).toHaveTextContent(/10-digit/);
     expect(within(help).getByRole("link", { name: /plan a trip/i })).toHaveAttribute("href", "/");
   });

@@ -193,6 +193,10 @@ export interface QuickResult {
   fields: TripPrefill;
   missing: string[];
   unclear: string[];
+  /** The language the request was written in ("hi", "ta", "en", ...), and whether we can read it. */
+  language?: string;
+  script?: string;
+  supported?: boolean;
 }
 
 export async function quickRequest(text: string) {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { EXAMPLE_GROUPS, EXAMPLES, type Example } from "../domain/examples";
+import { useI18n } from "../i18n/I18nProvider";
 import Icon from "./Icon";
 import "./ExampleMenu.css";
 
@@ -9,6 +10,8 @@ import "./ExampleMenu.css";
  * button pattern: arrow keys move, Escape closes and returns focus to the button.
  */
 export default function ExampleMenu({ onPick, disabled = false }: { onPick: (example: Example) => void; disabled?: boolean }) {
+  const { t } = useI18n();
+  const groupLabel = (g: string) => t(g === "Main example" ? "form.group.main" : g === "Edge cases" ? "form.group.edge" : "form.group.error");
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -70,16 +73,16 @@ export default function ExampleMenu({ onPick, disabled = false }: { onPick: (exa
           }
         }}
       >
-        Load an example
+        {t("form.examples")}
         <Icon name="chevron" className={`examples__chevron${open ? " examples__chevron--open" : ""}`} />
       </button>
       {open && (
-        <div id="examples-menu" className="examples__menu" role="menu" aria-label="Examples" onKeyDown={onMenuKeyDown}>
-          <p className="examples__note">Picking an example fills the form and builds it straight away.</p>
+        <div id="examples-menu" className="examples__menu" role="menu" aria-label={t("form.examplesAria")} onKeyDown={onMenuKeyDown}>
+          <p className="examples__note">{t("form.examplesNote")}</p>
           {EXAMPLE_GROUPS.map((group) => (
-            <div key={group} role="group" aria-label={group} className="examples__group">
+            <div key={group} role="group" aria-label={groupLabel(group)} className="examples__group">
               <p className="examples__heading" aria-hidden="true">
-                {group}
+                {groupLabel(group)}
               </p>
               {EXAMPLES.filter((e) => e.group === group).map((example) => {
                 const i = index++;
@@ -93,8 +96,8 @@ export default function ExampleMenu({ onPick, disabled = false }: { onPick: (exa
                     className={`examples__item examples__item--${group === "Error cases" ? "error" : group === "Edge cases" ? "edge" : "main"}`}
                     onClick={() => pick(example)}
                   >
-                    <span className="examples__title">{example.title}</span>
-                    <span className="examples__shows">{example.shows}</span>
+                    <span className="examples__title">{t(`ex.${example.id}.title`)}</span>
+                    <span className="examples__shows">{t(`ex.${example.id}.shows`)}</span>
                   </button>
                 );
               })}

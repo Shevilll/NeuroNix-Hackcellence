@@ -12,12 +12,12 @@ import QuickRequest from "../components/QuickRequest";
 import ReservationCard from "../components/ReservationCard";
 import Spinner from "../components/Spinner";
 import TripForm from "../components/TripForm";
+import { useI18n } from "../i18n/I18nProvider";
 import { messageFrom } from "../lib/errors";
 
 type Ok = Extract<BuildResult, { status: "OK" }>;
 type Alternatives = NonNullable<Ok["alternatives"]>;
 
-const LABELS: Record<string, string> = { recommended: "Recommended", cheapest: "Cheapest", fastest: "Fastest", best_rated: "Best rated" };
 const STORAGE_KEY = "bmh.planner.v1";
 
 interface Saved {
@@ -47,10 +47,10 @@ function writeSaved(saved: Saved | null) {
   }
 }
 
-function choicesOf(result: Ok): PackageChoice[] {
-  const list: PackageChoice[] = [{ key: "recommended", label: LABELS.recommended, package_id: result.package_id, package: result.package }];
+function choicesOf(result: Ok, t: (key: string) => string): PackageChoice[] {
+  const list: PackageChoice[] = [{ key: "recommended", label: t("pk.recommended"), package_id: result.package_id, package: result.package }];
   for (const [key, alt] of Object.entries(result.alternatives ?? {})) {
-    if (alt?.package) list.push({ key, label: LABELS[key] ?? key, package_id: alt.package_id, package: alt.package });
+    if (alt?.package) list.push({ key, label: t(`pk.${key}`), package_id: alt.package_id, package: alt.package });
   }
   return list;
 }
@@ -65,6 +65,7 @@ function withPackage(result: Ok, key: string, pkg: TripPackage): Ok {
 }
 
 export default function PlannerPage() {
+  const { t, ts } = useI18n();
   const [saved] = useState(readSaved);
   const [options, setOptions] = useState<TripOptions | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -90,7 +91,7 @@ export default function PlannerPage() {
   useEffect(() => {
     if (!saved) return;
     let live = true;
-    for (const choice of choicesOf(saved.result)) {
+    for (const choice of choicesOf(saved.result, t)) {
       getPackage(choice.package_id).then(
         (pkg) => live && setResult((r) => (r?.status === "OK" ? withPackage(r, choice.key, pkg) : r)),
         () => {
@@ -122,7 +123,7 @@ export default function PlannerPage() {
       setResult(await build(request));
       requestAnimationFrame?.(() => resultsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }));
     } catch (error) {
-      setServerError(messageFrom(error));
+      setServerError(ts(messageFrom(error, undefined, t)));
     } finally {
       setBusy(false);
     }
@@ -144,7 +145,7 @@ export default function PlannerPage() {
       setReservation({ number: r.reservation_number, pkg: r.package });
       requestAnimationFrame?.(() => resultsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" }));
     } catch (error) {
-      setConfirmError(messageFrom(error, "The booking could not be confirmed. Please try again."));
+      setConfirmError(ts(messageFrom(error, t("res.confirmFail"), t)));
     } finally {
       setConfirming(false);
     }
@@ -165,21 +166,21 @@ export default function PlannerPage() {
   return (
     <>
       <Hero
-        title="Where to next?"
-        sub="One plan with flights, hotels, transfers and things to do. Every part is checked to fit together and to fit your budget."
+        title={t("hero.title")}
+        sub={t("hero.sub")}
       />
       <main className="page">
         {loadFailed ? (
           <div className="card notice" role="alert">
-            <p className="notice__title">We could not load the trip options</p>
-            <p className="notice__text">Check that the backend is running, then try again.</p>
+            <p className="notice__title">{t("load.failTitle")}</p>
+            <p className="notice__text">{t("load.failText")}</p>
             <button type="button" className="btn btn--primary" onClick={load}>
-              Try again
+              {t("load.retry")}
             </button>
           </div>
         ) : !options ? (
           <div className="card skeleton">
-            <Spinner label="Loading trip options…" showLabel />
+            <Spinner label={t("load.loading")} showLabel />
             <div className="skeleton__grid" aria-hidden="true">
               {Array.from({ length: 8 }, (_, i) => (
                 <div key={i} className="skeleton__field">
@@ -197,59 +198,66 @@ export default function PlannerPage() {
         )}
 
         <div ref={resultsRef} className="results" aria-live="polite">
-          {result && (
-            <button type="button" className="btn btn--secondary btn--sm" onClick={clearBookings}>
-              <Icon name="trash" /> Clear bookings
-            </button>
-          )}
-          {result?.status === "NO_PACKAGE" && <NoPackageNotice result={result} onTry={rerun} />}
-          {result?.status === "OVER_BUDGET" && (
-            <>
-              <OverBudgetNotice result={result} onTry={rerun} onRaise={(b) => rerun({ budget: b })} />
-              {result.cheapest_package && <PackageView pkg={result.cheapest_package} budget={budget} eyebrow="Cheapest package we found" />}
-            </>
-          )}
-          {result?.status === "OK" && result.package && reservation && (
-            <>
-              <ReservationCard number={reservation.number} pkg={reservation.pkg} showLink />
-              <PackageView pkg={reservation.pkg} budget={reservation.pkg.budget_inr ?? budget} eyebrow="Booked holiday" />
-            </>
-          )}
-          {result?.status === "OK" && result.package && !reservation && (() => {
-            const choices = choicesOf(result);
-            const current = choices.find((c) => c.key === pick) ?? choices[0];
-            return (
+          {/* While a build runs, the old result gives way to one loading card. */}
+          {busy ? (
+            <div className="card">
+              <Spinner label={t("plan.building")} showLabel />
+            </div>
+          ) : (<>
+            {result && (
+              <button type="button" className="btn btn--secondary btn--sm" onClick={clearBookings}>
+                <Icon name="trash" /> {t("res.clear")}
+              </button>
+            )}
+            {result?.status === "NO_PACKAGE" && <NoPackageNotice result={result} onTry={rerun} />}
+            {result?.status === "OVER_BUDGET" && (
               <>
-                {choices.length > 1 && (
-                  <div className="results__pick">
-                    <h2 className="section-title">Pick your package</h2>
-                    <PackagePicker choices={choices} value={current.key} budget={budget} onPick={setPick} />
-                  </div>
-                )}
-                <PackageView
-                  key={current.package_id}
-                  pkg={current.package}
-                  budget={budget}
-                  eyebrow={`${current.label} package`}
-                  edit={{ id: current.package_id, onChanged: (p) => setResult(withPackage(result, current.key, p)) }}
-                  actions={
-                    <>
-                      {confirmError && (
-                        <p role="alert" className="inline-error">
-                          <Icon name="warning" /> {confirmError}
-                        </p>
-                      )}
-                      <button type="button" className="btn btn--primary btn--block btn--lg" disabled={confirming} onClick={() => confirm(current.package_id)}>
-                        {confirming && <Spinner decorative />}
-                        {confirming ? "Confirming…" : "Confirm booking"}
-                      </button>
-                      <p className="fine-print">No payment is taken. You get a 10-digit reservation number.</p>
-                    </>
-                  }
-                />
+                <OverBudgetNotice result={result} onTry={rerun} onRaise={(b) => rerun({ budget: b })} />
+                {result.cheapest_package && <PackageView pkg={result.cheapest_package} budget={budget} eyebrow={t("res.cheapestFound")} />}
               </>
-            );
-          })()}
+            )}
+            {result?.status === "OK" && result.package && reservation && (
+              <>
+                <ReservationCard number={reservation.number} pkg={reservation.pkg} showLink />
+                <PackageView pkg={reservation.pkg} budget={reservation.pkg.budget_inr ?? budget} eyebrow={t("res.booked")} />
+              </>
+            )}
+            {result?.status === "OK" && result.package && !reservation && (() => {
+              const choices = choicesOf(result, t);
+              const current = choices.find((c) => c.key === pick) ?? choices[0];
+              return (
+                <>
+                  {choices.length > 1 && (
+                    <div className="results__pick">
+                      <h2 className="section-title">{t("res.pick")}</h2>
+                      <PackagePicker choices={choices} value={current.key} budget={budget} onPick={setPick} />
+                    </div>
+                  )}
+                  <PackageView
+                    key={current.package_id}
+                    pkg={current.package}
+                    budget={budget}
+                    eyebrow={t("res.package", { name: current.label })}
+                    edit={{ id: current.package_id, onChanged: (p) => setResult(withPackage(result, current.key, p)) }}
+                    actions={
+                      <>
+                        {confirmError && (
+                          <p role="alert" className="inline-error">
+                            <Icon name="warning" /> {confirmError}
+                          </p>
+                        )}
+                        <button type="button" className="btn btn--primary btn--block btn--lg" disabled={confirming} onClick={() => confirm(current.package_id)}>
+                          {confirming && <Spinner decorative />}
+                          {confirming ? t("res.confirming") : t("res.confirm")}
+                        </button>
+                        <p className="fine-print">{t("res.noPay")}</p>
+                      </>
+                    }
+                  />
+                </>
+              );
+            })()}
+          </>)}
         </div>
       </main>
     </>

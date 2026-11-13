@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import Icon from "./Icon";
+import Spinner from "./Spinner";
 
 interface Props {
   /** Accessible name of the first button, e.g. "Delete booking 4435693622". */
@@ -16,6 +18,7 @@ interface Props {
 
 /** A delete button that asks once before it deletes: nothing is sent until the traveller says yes. */
 export default function ConfirmDelete({ label, text, question, confirmText, busy = false, onConfirm }: Props) {
+  const { t } = useI18n();
   const [asking, setAsking] = useState(false);
 
   if (!asking) {
@@ -39,10 +42,11 @@ export default function ConfirmDelete({ label, text, question, confirmText, busy
             onConfirm();
           }}
         >
-          {busy ? "Deleting…" : confirmText}
+          {busy && <Spinner decorative />}
+          {busy ? t("c.deleting") : confirmText}
         </button>
         <button type="button" className="btn btn--secondary btn--sm" disabled={busy} onClick={() => setAsking(false)}>
-          Keep it
+          {t("c.keep")}
         </button>
       </div>
     </div>

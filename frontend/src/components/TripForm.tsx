@@ -8,6 +8,7 @@ import {
   type FormValues,
 } from "../domain/requestValidation";
 import type { Example } from "../domain/examples";
+import { useI18n } from "../i18n/I18nProvider";
 import DatePicker from "./DatePicker";
 import ExampleMenu from "./ExampleMenu";
 import Select from "./Select";
@@ -36,6 +37,7 @@ interface Props {
 type ErrorKey = keyof FormErrors;
 
 export default function TripForm({ options, onSubmit, busy = false, serverError, prefill }: Props) {
+  const { t, lang } = useI18n();
   const [values, setValues] = useState<FormValues>(EMPTY);
   const [childCount, setChildCount] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
@@ -81,7 +83,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
 
   /** Check the values like a submit would, then build them; field messages show if any are wrong. */
   function send(next: FormValues) {
-    const found = validateForm(next, options);
+    const found = validateForm(next, options, t, lang);
     setErrors(found);
     if (Object.keys(found).length === 0) onSubmit(toRequest(next));
   }
@@ -112,7 +114,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
   return (
     <form className="card trip-form" onSubmit={submit} noValidate>
       <div className="trip-form__head">
-        <h2>Tell us about your trip</h2>
+        <h2>{t("form.title")}</h2>
         <ExampleMenu onPick={runExample} disabled={busy} />
       </div>
 
@@ -123,33 +125,33 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
       )}
 
       <fieldset className="trip-form__group">
-        <legend>Where and when</legend>
+        <legend>{t("form.whereWhen")}</legend>
         <div className="trip-form__grid trip-form__grid--two">
-        <Field id="origin" label="Departure city" error={errors.origin} custom>
+        <Field id="origin" label={t("form.origin")} error={errors.origin} custom>
           <Select
             id="origin"
             labelledBy="origin-label"
             value={values.origin}
-            placeholder="Select a city"
-            options={options.departure_cities.map((c) => ({ value: c.airport, label: `${c.city} (${c.airport})` }))}
+            placeholder={t("form.originPick")}
+            options={options.departure_cities.map((c) => ({ value: c.airport, label: `${t(`p.${c.city}`)} (${c.airport})` }))}
             onChange={(v) => update({ origin: v }, "origin")}
             {...custom("origin")}
           />
         </Field>
 
-        <Field id="country" label="Destination country" error={errors.country} custom>
+        <Field id="country" label={t("form.country")} error={errors.country} custom>
           <Select
             id="country"
             labelledBy="country-label"
             value={values.country}
-            placeholder="Select a country"
-            options={options.countries.map((c) => ({ value: c.code, label: c.name }))}
+            placeholder={t("form.countryPick")}
+            options={options.countries.map((c) => ({ value: c.code, label: t(`p.${c.name}`) }))}
             onChange={(v) => update({ country: v }, "country")}
             {...custom("country")}
           />
         </Field>
 
-        <Field id="startDate" label="Start date" error={errors.startDate} custom hint={`Flights and rooms run ${formatLongDate(rules.data_window.first_night)} to ${formatLongDate(rules.data_window.last_departure)}.`}>
+        <Field id="startDate" label={t("form.startDate")} error={errors.startDate} custom hint={t("form.window", { from: formatLongDate(rules.data_window.first_night, lang), to: formatLongDate(rules.data_window.last_departure, lang) })}>
           <DatePicker
             id="startDate"
             labelledBy="startDate-label"
@@ -161,7 +163,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
           />
         </Field>
 
-        <Field id="nights" label="Nights" error={errors.nights} hint={`${rules.min_nights} to ${rules.max_nights} nights.`}>
+        <Field id="nights" label={t("form.nights")} error={errors.nights} hint={t("form.nightsHint", { min: rules.min_nights, max: rules.max_nights })}>
           <input
             id="nights"
             type="number"
@@ -176,9 +178,9 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
       </fieldset>
 
       <fieldset className="trip-form__group">
-        <legend>Who is travelling</legend>
+        <legend>{t("form.who")}</legend>
         <div className="trip-form__grid trip-form__grid--people">
-        <Field id="adults" label="Adults" error={errors.adults}>
+        <Field id="adults" label={t("form.adults")} error={errors.adults}>
           <input
             id="adults"
             type="number"
@@ -189,7 +191,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
           />
         </Field>
 
-        <Field id="children" label="Children">
+        <Field id="children" label={t("form.children")}>
           <input
             id="children"
             type="number"
@@ -204,7 +206,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
           <Field
             key={i}
             id={`child-age-${i}`}
-            label={`Age of child ${i + 1}`}
+            label={t("form.childAge", { n: i + 1 })}
             error={i === 0 ? errors.childAges : undefined}
             errorId="childAges-error"
           >
@@ -229,9 +231,9 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
       </fieldset>
 
       <fieldset className="trip-form__group">
-        <legend>Budget</legend>
+        <legend>{t("form.budgetGroup")}</legend>
         <div className="trip-form__grid">
-        <Field id="budget" label="Budget for everything (INR)" error={errors.budget} hint="Flights, hotels, transfers and attractions all count.">
+        <Field id="budget" label={t("form.budget")} error={errors.budget} hint={t("form.budgetHint")}>
           <div className="money">
             <span className="money__sign" aria-hidden="true">₹</span>
             <input
@@ -250,7 +252,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
 
       <button type="submit" className="btn btn--primary trip-form__submit" disabled={busy}>
         {busy && <Spinner decorative />}
-        {busy ? "Building your package…" : "Build my holiday"}
+        {busy ? t("form.building") : t("form.build")}
       </button>
     </form>
   );

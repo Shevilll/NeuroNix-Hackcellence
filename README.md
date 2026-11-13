@@ -119,6 +119,7 @@ Status legend: **Done** · **Partly** · **Planned**
 |---|---|---|---|
 | S1 | Quick request | Plain-words request parsed with rules and regular expressions (no AI) to fill the form | Done |
 | S2 | Booking uses up seats and rooms | Confirmed bookings hold seats and room-nights in our own store; a booking needing the same last seats/rooms is refused | Done |
+| S3a | Many languages | A language picker in the header switches the main screens between English and 12 Indian languages (Hindi, Bengali, Telugu, Marathi, Tamil, Gujarati, Urdu, Kannada, Malayalam, Odia, Punjabi, Assamese). Place names come from the catalog's cities and countries. The quick-request box also reads a trip typed or spoken in any of them (and Hindi in English letters) with word lists, not a model, and answers in the language it was written in. Voice input listens in the chosen language | Done |
 | S3 | Our own ideas | Live rule checklist on every package, a checker page that validates any exported trip JSON against every rule, and budget-fix suggestions with re-solved totals. Photos of hotels and attractions on the package timeline. | Done |
 
 ---
@@ -305,7 +306,7 @@ Base URL: `http://localhost:8000/api`
 | `GET` | `/packages/{id}/options/flights?role=arrival_flight\|return_flight` | Valid flight alternatives with `price_diff` |
 | `GET` | `/packages/{id}/options/attractions` | Attractions that can be added, per day, with `price_diff` |
 | `GET` | `/packages/{id}/city-plans` | Every valid city plan with its total and whether it fits the budget |
-| `POST` | `/packages/{id}/changes` | One change with `expected_version`: `replace_hotel`, `replace_flight`, `add_attraction`, `remove_attraction`, `change_cities`. `422` with the reason when refused, `409` for a stale version. The answer also carries `price_diff_inr` and `warnings` (for example `OVER_BUDGET`, or `EMPTY_DAY` when a day is left without attractions) |
+| `POST` | `/packages/{id}/changes` | One change with `expected_version`: `replace_hotel`, `replace_flight`, `add_attraction`, `remove_attraction`, `change_cities`. `422` with the reason when refused, `409` for a stale version. The answer also carries `price_diff_inr` and `warnings` (for example `OVER_BUDGET`). A removal that would leave a full day with no attraction is refused with `422` |
 | `GET` | `/packages/{id}/export` | Download the package as trip-format JSON |
 | `POST` | `/packages/{id}/confirm` | Book it. Needs an `Idempotency-Key` header. `409 SOLD_OUT` when the last seats or rooms are gone |
 | `GET` | `/reservations/{number}` | Reservation summary, or `404 {"detail": "not found"}` |
@@ -432,10 +433,11 @@ NeuroNix-Hackcellence/
 - City taxis to and from stations on change days are optional; they are added only when the traveler
   asks, and then priced.
 - No login and no payment: "confirm" saves the reservation in the app's own database.
-- The first package has one attraction per full day (the rules allow one or two); the traveler can add a second. After a change a day may have none (the traveler may remove a visit), and the app warns about it; more than two on one day is refused.
+- The first package has one attraction per full day (the rules allow one or two); the traveler can add a second. A removal that would leave a full day with no visit is refused with a reason, so every package the app shows keeps 1 to 2 visits on each full day. More than two on one day is refused too.
 - The cheapest and fastest packages can be the same package when one is both.
 - The request has no traveler-name field, so the exported `traveler.name` is a placeholder.
 - Hotel photos are generic room photos shared by several hotels, because the hotels in the data are fictional.
+- Languages: the main planner screens, form messages and the quick-request answers are translated. Text written by the backend (rule explanations, change notices, error details), the example titles and the bookings and checker pages stay in English. The quick request reads only the languages above (word lists, not a translator): other languages and mixed-in slang may be missed, and the form shows what was understood so the traveler can fix it. Place names in the quick request cover the catalog's cities only.
 
 ---
 
@@ -443,6 +445,6 @@ NeuroNix-Hackcellence/
 
 - All catalog data is synthetic and supplied by the organisers. It is read-only and used unchanged.
 - All prices are in INR (whole rupees). All times are local to the place.
-- Photos are real, freely licensed images from Wikimedia Commons. Credits are in
-  [`images/ATTRIBUTIONS.md`](images/ATTRIBUTIONS.md) and are served by `GET /api/credits`; the app footer
-  names the source.
+- Photos are real, freely licensed images from Wikimedia Commons. The per-photo credits (author, licence,
+  source link) are in [`images/ATTRIBUTIONS.md`](images/ATTRIBUTIONS.md) and are served by
+  `GET /api/credits`. The app itself has no credits panel: its footer names Wikimedia Commons as the source.
