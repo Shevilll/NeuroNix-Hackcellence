@@ -98,7 +98,7 @@ describe("the whole site in Hindi", () => {
     expect(screen.getByText(hi["ex.menon.title"])).toBeInTheDocument();
     expectNoEnglish();
     await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: new RegExp(hi["dp.pick"]) }));
+    await user.click(screen.getAllByText(hi["dp.pick"])[0].closest("button")!);
     expectNoEnglish();
   });
 

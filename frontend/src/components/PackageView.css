@@ -499,6 +499,16 @@
   .day__tags {
     margin-left: 0;
   }
+  /* On a phone the place and arrival tags wrap under the day and date instead of squeezing them. */
+  .day__head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  /* "Change" and "Remove" are big enough to tap with a thumb. */
+  .link-btn {
+    min-height: 40px;
+    padding: 4px 10px;
+  }
 }
 
 /* Travel time between two visits (from their latitude and longitude) */

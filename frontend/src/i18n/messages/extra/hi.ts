@@ -301,6 +301,7 @@ const hi: Record<string, string> = {
   "plan.building": "आपकी छुट्टी बना रहे हैं और हर नियम जांच रहे हैं…",
   "chk.checking": "फ़ाइल को हर नियम पर जांच रहे हैं…",
   "c.removing": "हटा रहे हैं…",
+  "nav.menu": "मेनू",
 };
 
 export default hi;

@@ -208,6 +208,23 @@
   }
 }
 
+/* On a phone the day buttons sit in one row that scrolls sideways, instead of filling five rows. */
+@media (max-width: 640px) {
+  .route-map__days {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .route-map__days::-webkit-scrollbar {
+    display: none;
+  }
+  .route-map__day {
+    flex: none;
+  }
+}
+
 /* On a wide screen the map spans the package page between its header and the days. */
 @media (min-width: 960px) {
   .pkg:has(> .route-map) {

@@ -73,6 +73,41 @@
   outline-color: var(--on-primary);
 }
 
+/* ---------- Header menu: inline on wide screens, a drop-down behind a menu button on phones ---------- */
+.header-menu {
+  display: contents;
+}
+
+.menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-left: auto;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--on-primary);
+  cursor: pointer;
+}
+
+.menu-btn .icon {
+  width: 24px;
+  height: 24px;
+}
+
+.menu-btn:hover,
+.menu-btn[aria-expanded="true"] {
+  background: var(--blue-700);
+}
+
+.menu-btn:focus-visible {
+  outline: 2px solid var(--on-primary);
+  outline-offset: 2px;
+}
+
 /* ---------- Hero band (content below overlaps it) ---------- */
 .hero {
   max-width: none;
@@ -1233,6 +1268,61 @@ a.btn {
   }
   .reservation {
     flex-direction: column;
+  }
+}
+
+/* ---------- Phones: the header shows the brand and a menu button; the links drop down ---------- */
+@media (max-width: 720px) {
+  .app-header {
+    position: relative;
+    z-index: 950;
+  }
+  .app-header__inner {
+    flex-wrap: nowrap;
+    min-height: 60px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .menu-btn {
+    display: inline-flex;
+  }
+  .header-menu {
+    display: none;
+  }
+  .header-menu--open {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 8px var(--gutter) 16px;
+    border-top: 1px solid var(--blue-700);
+    background: var(--blue-900);
+    box-shadow: var(--shadow-lg);
+  }
+  .header-menu .nav {
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    margin-left: 0;
+    overflow: visible;
+  }
+  .header-menu .nav__link {
+    flex: none;
+    justify-content: flex-start;
+    min-height: 48px;
+    padding: 0 14px;
+    border-radius: var(--radius);
+    font-size: 1rem;
+  }
+  .header-menu .nav__link .icon {
+    display: inline-block;
+  }
+  .header-menu .lang-switch,
+  .header-menu .lang-switch .control {
+    width: 100%;
   }
 }
 

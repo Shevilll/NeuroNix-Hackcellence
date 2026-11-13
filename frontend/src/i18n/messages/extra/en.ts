@@ -322,6 +322,7 @@ const en: Record<string, string> = {
   "plan.building": "Building your holiday and checking every rule…",
   "chk.checking": "Checking the file against every rule…",
   "c.removing": "Removing…",
+  "nav.menu": "Menu",
 };
 
 export default en;

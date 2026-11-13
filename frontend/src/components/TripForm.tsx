@@ -184,9 +184,11 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
           <input
             id="adults"
             type="number"
+            min={0}
+            onKeyDown={blockNonDigitKeys}
             inputMode="numeric"
             value={values.adults}
-            onChange={(e) => update({ adults: e.target.value }, "adults")}
+            onChange={(e) => update({ adults: digitsOnly(e.target.value) }, "adults")}
             {...field("adults")}
           />
         </Field>
@@ -195,10 +197,11 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
           <input
             id="children"
             type="number"
+            onKeyDown={blockNonDigitKeys}
             inputMode="numeric"
             min={0}
             value={childCount}
-            onChange={(e) => changeChildCount(e.target.value)}
+            onChange={(e) => changeChildCount(digitsOnly(e.target.value))}
           />
         </Field>
 
@@ -213,11 +216,13 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
             <input
               id={`child-age-${i}`}
               type="number"
+              min={0}
+              onKeyDown={blockNonDigitKeys}
               inputMode="numeric"
               value={age}
               onChange={(e) =>
                 update(
-                  { childAges: values.childAges.map((a, j) => (j === i ? e.target.value : a)) },
+                  { childAges: values.childAges.map((a, j) => (j === i ? digitsOnly(e.target.value) : a)) },
                   "childAges",
                 )
               }
@@ -257,6 +262,12 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
     </form>
   );
 }
+
+/** Counts and ages are whole numbers: drop minus signs, decimals and exponents. */
+const digitsOnly = (text: string) => text.replace(/\D/g, "");
+const blockNonDigitKeys = (event: { key: string; preventDefault: () => void }) => {
+  if (["-", "+", ".", ",", "e", "E"].includes(event.key)) event.preventDefault();
+};
 
 function Field(props: {
   id: string;
