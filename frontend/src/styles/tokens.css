@@ -11,6 +11,8 @@
   --blue-200: #c2dbff; /* selected outlines */
   --blue-100: #ebf3ff; /* tinted backgrounds, selected rows */
   --blue-50: #f5f9ff;
+  /* Booking.com's yellow frame around search boxes (brand accent, not a status colour) */
+  --search-frame: #ffb700;
 
   /* Neutrals */
   --bg: #f5f5f5;
