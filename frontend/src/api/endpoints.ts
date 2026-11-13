@@ -45,6 +45,22 @@ export interface TripPackage {
   items: TripItem[];
 }
 
+/** Another start date or length that really produces a package (sent with NO_PACKAGE). */
+export interface NearbyOption {
+  kind: "other_dates" | "other_nights";
+  start_date: string;
+  end_date: string;
+  nights: number;
+  total_inr: number;
+  within_budget: boolean;
+  message: string;
+}
+
+/** A change that was solved and fits the budget, or the amount to raise the budget by (OVER_BUDGET). */
+export type SuggestionDetail =
+  | { kind: "fewer_nights" | "other_dates"; start_date: string; end_date: string; nights: number; total_inr: number; message: string }
+  | { kind: "raise_budget"; amount_inr: number; message: string };
+
 export type BuildResult =
   | {
       status: "OK";
@@ -52,13 +68,14 @@ export type BuildResult =
       package: TripPackage;
       alternatives?: Record<"cheapest" | "fastest" | "best_rated", { package_id: string; package: TripPackage }>;
     }
-  | { status: "NO_PACKAGE"; reasons: { code: string; message: string }[] }
+  | { status: "NO_PACKAGE"; reasons: { code: string; message: string }[]; nearby?: NearbyOption[] }
   | {
       status: "OVER_BUDGET";
       cheapest_total: number;
       budget: number;
       short_by: number;
       suggestions: string[];
+      suggestion_details?: SuggestionDetail[];
       cheapest_package: TripPackage;
     };
 

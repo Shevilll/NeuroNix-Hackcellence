@@ -3,6 +3,8 @@ import { ApiError } from "./api/client";
 import { build, confirmPackage, getOptions, getReservation, type BuildResult, type TripPackage } from "./api/endpoints";
 import { newIdempotencyKey } from "./api/client";
 import ChangePanel from "./components/ChangePanel";
+import NoPackageNotice from "./components/NoPackageNotice";
+import OverBudgetNotice from "./components/OverBudgetNotice";
 import QuickRequest from "./components/QuickRequest";
 import CheckerPanel from "./components/CheckerPanel";
 import PhotoCredits from "./components/PhotoCredits";
@@ -39,11 +41,12 @@ export default function App() {
   const [lookup, setLookup] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [confirmKey] = useState(newIdempotencyKey);
+  const [lastRequest, setLastRequest] = useState<TripRequest | null>(null);
 
   async function confirm(id: string) {
     setBusy(true);
     try {
-      const r = await confirmPackage(id, `${confirmKey}:${id}`);
+      const r = await confirmPackage(id, confirmKey);
       setReservation({ number: r.reservation_number, pkg: r.package });
     } catch (error) {
       setServerError(messageFrom(error));
@@ -74,6 +77,7 @@ export default function App() {
     setServerError(null);
     try {
       setBudget(request.budget);
+      setLastRequest(request);
       setReservation(null);
       setPick("recommended");
       setResult(await build(request));
@@ -82,6 +86,14 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Run the same request again with other dates or nights, or a bigger budget (from an explanation). */
+  function rerun(change: Partial<TripRequest>) {
+    if (!lastRequest) return;
+    const next = { ...lastRequest, ...change };
+    setPrefill(next);
+    submit(next);
   }
 
   return (
@@ -124,22 +136,10 @@ export default function App() {
           <>
             <QuickRequest onParsed={(r) => setPrefill({ ...r.fields })} />
             <TripForm prefill={prefill} options={options} onSubmit={submit} busy={busy} serverError={serverError} />
-            {result?.status === "NO_PACKAGE" && (
-              <div className="card notice" role="alert">
-                <p className="notice__title">No package is possible</p>
-                {result.reasons.map((r) => <p key={r.code} className="notice__text">{r.message}</p>)}
-              </div>
-            )}
+            {result?.status === "NO_PACKAGE" && <NoPackageNotice result={result} onTry={rerun} />}
             {result?.status === "OVER_BUDGET" && (
               <>
-                <div className="card notice" role="alert">
-                  <p className="notice__title">Over budget</p>
-                  <p className="notice__text">
-                    The cheapest package costs ₹{result.cheapest_total.toLocaleString("en-IN")}, which is ₹
-                    {result.short_by.toLocaleString("en-IN")} more than your budget.
-                  </p>
-                  {result.suggestions.map((t) => <p key={t} className="notice__text">{t}</p>)}
-                </div>
+                <OverBudgetNotice result={result} onTry={rerun} onRaise={(budget) => rerun({ budget })} />
                 <PackageView pkg={result.cheapest_package} budget={budget} />
               </>
             )}
