@@ -36,6 +36,16 @@ function Shell() {
         <Route path="/check" element={<CheckPage />} />
         <Route path="*" element={<PlannerPage />} />
       </Routes>
+      <footer className="site-footer">
+        <div className="site-footer__inner">
+          <span className="site-footer__brand">
+            <Logo size={24} /> Build My Holiday
+          </span>
+          <span className="site-footer__note">
+            Prices in Indian rupees for everyone travelling. Photos from Wikimedia Commons under free licences.
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }

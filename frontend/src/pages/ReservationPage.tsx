@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { getReservation, type TripPackage } from "../api/endpoints";
 import Hero from "../components/Hero";
 import Icon from "../components/Icon";
@@ -77,6 +77,25 @@ export default function ReservationPage() {
         </form>
       </Hero>
       <main className="page">
+        {state.kind === "idle" && (
+          <section className="card lookup-help" aria-labelledby="lookup-help-title">
+            <span className="lookup-help__icon">
+              <Icon name="file" />
+            </span>
+            <div>
+              <h2 id="lookup-help-title" className="lookup-help__title">
+                Where to find your number
+              </h2>
+              <p className="muted">
+                When you confirm a package you get a 10-digit reservation number. It opens the full day-by-day plan
+                at any time, also after the app restarts.
+              </p>
+              <Link className="btn btn--secondary btn--sm" to="/">
+                <Icon name="home" /> Plan a trip
+              </Link>
+            </div>
+          </section>
+        )}
         {state.kind === "loading" && (
           <div className="card">
             <Spinner label="Opening your reservation…" showLabel />

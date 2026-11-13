@@ -169,7 +169,6 @@ a.btn {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.8125rem;
-  text-align: center;
 }
 
 .text-warn {
@@ -555,7 +554,7 @@ a.btn {
 }
 
 .lookup__field {
-  flex: 1 1 260px;
+  flex: 1 1 200px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -648,6 +647,77 @@ a.btn {
   gap: 8px;
 }
 
+/* ---------- Find-a-booking help ---------- */
+.lookup-help {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 880px;
+}
+
+.lookup-help__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--blue-100);
+  color: var(--blue-600);
+  font-size: 1.5rem;
+}
+
+.lookup-help__title {
+  font-size: 1.125rem;
+}
+
+.lookup-help .muted {
+  margin: 6px 0 14px;
+  max-width: 620px;
+}
+
+/* ---------- Site footer ---------- */
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.site-footer__inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 20px var(--gutter);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.site-footer__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--blue-900);
+  font-weight: 700;
+}
+
+/* The logo is white on blue in the header; give it a blue tile in the footer. */
+.site-footer__brand svg rect {
+  fill: var(--blue-100);
+}
+
+/* ---------- Tablets: summary and rules side by side ---------- */
+@media (min-width: 640px) and (max-width: 959px) {
+  .pkg .pkg__aside {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
 /* ---------- Small screens ---------- */
 @media (max-width: 720px) {
   .nav {
@@ -660,6 +730,51 @@ a.btn {
   }
   .page {
     margin-top: -56px;
+  }
+}
+
+@media (max-width: 640px) {
+  .picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .picker__tab {
+    padding: 12px;
+    gap: 4px;
+  }
+  .picker__label {
+    font-size: 0.9375rem;
+  }
+  .picker__about {
+    display: none;
+  }
+  .picker__price {
+    font-size: 1.125rem;
+  }
+  .picker__route {
+    font-size: 0.8125rem;
+  }
+  .picker__meta {
+    font-size: 0.75rem;
+  }
+  .page {
+    gap: 16px;
+  }
+  .planner-form,
+  .results {
+    gap: 16px;
+  }
+  .card {
+    padding: 18px 16px;
+  }
+  .pkg .pkg__title h2 {
+    font-size: 1.25rem;
+  }
+  .budget__total {
+    font-size: 1.5rem;
+  }
+  .lookup-help {
+    flex-direction: column;
   }
 }
 

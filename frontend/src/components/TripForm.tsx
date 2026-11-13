@@ -178,7 +178,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
 
       <fieldset className="trip-form__group">
         <legend>Who is travelling</legend>
-        <div className="trip-form__grid">
+        <div className="trip-form__grid trip-form__grid--people">
         <Field id="adults" label="Adults" error={errors.adults}>
           <input
             id="adults"
