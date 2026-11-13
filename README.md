@@ -119,7 +119,7 @@ Status legend: **Done** · **Partly** · **Planned**
 |---|---|---|---|
 | S1 | Quick request | Plain-words request parsed with rules and regular expressions (no AI) to fill the form | Done |
 | S2 | Booking uses up seats and rooms | Confirmed bookings hold seats and room-nights in our own store; a booking needing the same last seats/rooms is refused | Done |
-| S3 | Our own ideas | Live rule checklist on every package, a checker page that validates any exported trip JSON against every rule, and budget-fix suggestions with re-solved totals. Photos of hotels and attractions on the package timeline, with a Photo credits panel. | Done |
+| S3 | Our own ideas | Live rule checklist on every package, a checker page that validates any exported trip JSON against every rule, and budget-fix suggestions with re-solved totals. Photos of hotels and attractions on the package timeline. | Done |
 
 ---
 
@@ -172,6 +172,9 @@ flowchart TB
   colour defined once as a token. Every icon is an inline SVG that takes the text colour, never an emoji
   (tests fail if one appears in the UI or in backend messages). Status is always shown with an icon and
   words, not colour alone; inputs are labelled; loading states announce themselves to screen readers.
+  The layout is responsive from a 375 px phone to a wide desktop: one content column with the same side
+  margins on every page, the summary beside the day plan on desktop, beside the rules on a tablet, and
+  above the day plan on a phone, with no sideways scrolling.
 
 | Layer | Tech |
 |---|---|
@@ -199,8 +202,9 @@ The app — not the traveler — chooses the cities, the order, and the nights i
    - every full day can hold 1–2 open, non-overlapping attractions.
 3. **Preference.** Among the survivors the recommended package is the one that visits **as many cities
    as the nights allow** (more variety for the traveler), then has the **lowest total price**, **within
-   budget**. For every candidate the cheapest valid flights, hotels and transfers are chosen
-   independently, because the costs add up. If the most varied plans do not fit the budget the app
+   budget**. For every candidate the hotel, its airport and between-city transfers, and the
+   attractions are chosen together at the lowest total (a cheaper hotel can need a dearer transfer),
+   with an exact search for the cheapest one-visit-per-day attraction plan in each city. If the most varied plans do not fit the budget the app
    falls back to fewer cities before it reports that the budget is too small.
 
 For the three-package view (G4) the same search runs with a different objective:
@@ -209,7 +213,7 @@ For the three-package view (G4) the same search runs with a different objective:
 |---|---|---|
 | Cheapest | Lowest total price | Shorter travel time |
 | Fastest | Least travel time = both flight `duration_minutes` + every between-city transfer `duration_minutes` | Lower total |
-| Best rated | Highest hotel `stars` averaged per night, total within budget (guest `rating` does not count) | Lower total |
+| Best rated | Highest hotel `stars` averaged per night, total within budget (guest `rating` does not count). Hotel tiers can be mixed across cities to reach the most stars the budget allows | Lower total |
 
 ---
 
@@ -375,7 +379,7 @@ We work test-first: the tests for a module are written and committed before the 
 | API / integration | Idempotent confirm (same key twice → same number; concurrent confirms → one reservation), persistence across restart, `not found`, export shape |
 | Data guard | Checksums prove `data/catalog/` is byte-identical to the organiser files |
 | Parser | The quick-request parser: budgets, dates, nights, origin, country, travellers |
-| Frontend | Form messages, retrying API client, quick-request box, icons, loading states, and acting on a "try these dates" or "raise budget" suggestion |
+| Frontend | Form messages and custom controls, retrying API client, quick-request box, page routes, package picker, budget bar, change options with price differences, confirm and reservation pages, refresh survival, icons, loading states, and acting on a "try these dates" or "raise budget" suggestion |
 
 ```bash
 cd backend && .venv/bin/pytest -q
@@ -408,9 +412,12 @@ NeuroNix-Hackcellence/
     └── src/
         ├── api/               # client with retry + idempotency, endpoints, types
         ├── domain/            # form validation
-        ├── styles/            # tokens (the only place colours are defined), base, results
-        └── components/        # TripForm, QuickRequest, PackageView, ChangePanel, RuleChecklist,
-                               #   CheckerPanel, NoPackageNotice, OverBudgetNotice, Icon, Spinner, ...
+        ├── lib/               # formatting (INR, dates, durations) and error messages
+        ├── pages/             # PlannerPage (/), ReservationPage (/r, /r/:number), CheckPage (/check)
+        ├── styles/            # tokens (the only place colours are defined), base, layout, results
+        └── components/        # TripForm, QuickRequest, PackagePicker, PackageView, BudgetBar,
+                               #   ChangeOptions, ReservationCard, RuleChecklist, CheckerPanel,
+                               #   NoPackageNotice, OverBudgetNotice, Select, DatePicker, Icon, ...
 ```
 
 ---
@@ -424,14 +431,10 @@ NeuroNix-Hackcellence/
 - Hotel check-in and check-out times are shown for information only and do not restrict the plan.
 - City taxis to and from stations on change days are optional; they are added only when the traveler
   asks, and then priced.
-- For a very early return flight, the hotel-to-airport pickup can be the evening before (still inside
-  service hours, and that evening is a booked hotel night).
 - No login and no payment: "confirm" saves the reservation in the app's own database.
 - The first package has one attraction per full day (the rules allow one or two); the traveler can add a second. After a change a day may have none (the traveler may remove a visit), and the app warns about it; more than two on one day is refused.
-- The builder picks the cheapest valid flights, hotel and transfers for each city plan and compares plans; it does not search every combination of parts across cities, so on rare dates a slightly cheaper mix could exist.
 - The cheapest and fastest packages can be the same package when one is both.
 - The request has no traveler-name field, so the exported `traveler.name` is a placeholder.
-- "Best rated" picks the top-star hotel in each city and skips city plans where that exceeds the budget; it does not mix tiers to squeeze under the budget.
 - Hotel photos are generic room photos shared by several hotels, because the hotels in the data are fictional.
 
 ---
@@ -441,4 +444,5 @@ NeuroNix-Hackcellence/
 - All catalog data is synthetic and supplied by the organisers. It is read-only and used unchanged.
 - All prices are in INR (whole rupees). All times are local to the place.
 - Photos are real, freely licensed images from Wikimedia Commons. Credits are in
-  [`images/ATTRIBUTIONS.md`](images/ATTRIBUTIONS.md) and are shown in the app in the Photo credits panel.
+  [`images/ATTRIBUTIONS.md`](images/ATTRIBUTIONS.md) and are served by `GET /api/credits`; the app footer
+  names the source.
