@@ -150,6 +150,16 @@ export default function PlannerPage() {
     }
   }
 
+  /** Take the package and any booking off the screen (the booking itself stays in the backend). */
+  function clearBookings() {
+    setResult(null);
+    setReservation(null);
+    setLastRequest(null);
+    setPick("recommended");
+    setConfirmError(null);
+    writeSaved(null);
+  }
+
   const budget = lastRequest?.budget ?? 0;
 
   return (
@@ -187,6 +197,11 @@ export default function PlannerPage() {
         )}
 
         <div ref={resultsRef} className="results" aria-live="polite">
+          {result && (
+            <button type="button" className="btn btn--secondary btn--sm" onClick={clearBookings}>
+              <Icon name="trash" /> Clear bookings
+            </button>
+          )}
           {result?.status === "NO_PACKAGE" && <NoPackageNotice result={result} onTry={rerun} />}
           {result?.status === "OVER_BUDGET" && (
             <>

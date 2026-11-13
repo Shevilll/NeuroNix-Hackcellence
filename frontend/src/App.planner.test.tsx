@@ -89,3 +89,54 @@ describe("planner: surviving a page refresh", () => {
     expect(screen.getByRole("combobox", { name: /departure city/i })).toHaveTextContent("Bengaluru (BLR)");
   });
 });
+
+describe("planner: clearing bookings from the screen", () => {
+  const bookedPackage = () => makePackage({ items: makePackage().items.map((i) => ({ ...i, status: "BOOKED" })) });
+
+  it("removes a confirmed booking and leaves the page empty, also after a refresh", async () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi((url, init) => {
+      if (url === "/api/packages" && init?.method === "POST") return reply(200, okBuild());
+      if (url === "/api/packages/pkg_test1/confirm") return reply(200, { reservation_number: "4435693622", package: bookedPackage() });
+      return undefined;
+    })));
+    const user = await buildMenon();
+    await user.click(await screen.findByRole("button", { name: /confirm booking/i }));
+    expect(await screen.findByRole("heading", { name: /reservation 4435693622/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /clear bookings/i }));
+
+    expect(screen.queryByRole("heading", { name: /reservation 4435693622/i })).toBeNull();
+    expect(screen.queryByRole("region", { name: /holiday package/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /clear bookings/i })).toBeNull();
+    expect(sessionStorage.getItem("bmh.planner.v1")).toBeNull();
+  });
+
+  it("discards a package that is not yet confirmed", async () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi((url, init) => (url === "/api/packages" && init?.method === "POST" ? reply(200, okBuild()) : undefined))));
+    const user = await buildMenon();
+    expect(await screen.findByRole("region", { name: /holiday package/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /clear bookings/i }));
+
+    expect(screen.queryByRole("region", { name: /holiday package/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /confirm booking/i })).toBeNull();
+    expect(sessionStorage.getItem("bmh.planner.v1")).toBeNull();
+  });
+
+  it("lets the traveller confirm a fresh package after clearing", async () => {
+    let builds = 0;
+    vi.stubGlobal("fetch", vi.fn(stubApi((url, init) => {
+      if (url === "/api/packages" && init?.method === "POST") { builds += 1; return reply(200, okBuild()); }
+      if (url === "/api/packages/pkg_test1/confirm") return reply(200, { reservation_number: "4435693622", package: bookedPackage() });
+      return undefined;
+    })));
+    const user = await buildMenon();
+    await user.click(await screen.findByRole("button", { name: /confirm booking/i }));
+    await screen.findByRole("heading", { name: /reservation 4435693622/i });
+    await user.click(screen.getByRole("button", { name: /clear bookings/i }));
+
+    await user.click(screen.getByRole("button", { name: /build my holiday/i }));
+    expect(await screen.findByRole("button", { name: /confirm booking/i })).toBeInTheDocument();
+    expect(builds).toBe(2);
+  });
+});
