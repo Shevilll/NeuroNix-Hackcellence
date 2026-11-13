@@ -1,0 +1,235 @@
+import { useState, type FormEvent, type ReactNode } from "react";
+import type { TripOptions, TripRequest } from "../api/types";
+import {
+  toRequest,
+  validateForm,
+  type FormErrors,
+  type FormValues,
+} from "../domain/requestValidation";
+import "./TripForm.css";
+
+const EMPTY: FormValues = {
+  origin: "",
+  country: "",
+  startDate: "",
+  nights: "",
+  adults: "",
+  childAges: [],
+  budget: "",
+};
+
+const MENON: FormValues = {
+  origin: "BLR",
+  country: "JP",
+  startDate: "2027-04-10",
+  nights: "6",
+  adults: "2",
+  childAges: ["6"],
+  budget: "3,50,000",
+};
+
+interface Props {
+  options: TripOptions;
+  onSubmit: (request: TripRequest) => void;
+  busy?: boolean;
+  serverError?: string | null;
+}
+
+type ErrorKey = keyof FormErrors;
+
+export default function TripForm({ options, onSubmit, busy = false, serverError }: Props) {
+  const [values, setValues] = useState<FormValues>(EMPTY);
+  const [childCount, setChildCount] = useState("");
+  const [errors, setErrors] = useState<FormErrors>({});
+
+  const { rules } = options;
+
+  function update(patch: Partial<FormValues>, clear: ErrorKey) {
+    setValues((v) => ({ ...v, ...patch }));
+    setErrors((e) => ({ ...e, [clear]: undefined }));
+  }
+
+  function changeChildCount(text: string) {
+    setChildCount(text);
+    const n = /^\d+$/.test(text) ? Math.min(Number(text), rules.max_travelers) : 0;
+    setValues((v) => ({
+      ...v,
+      childAges: Array.from({ length: n }, (_, i) => v.childAges[i] ?? ""),
+    }));
+    setErrors((e) => ({ ...e, childAges: undefined, adults: undefined }));
+  }
+
+  function loadExample() {
+    setValues(MENON);
+    setChildCount(String(MENON.childAges.length));
+    setErrors({});
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const found = validateForm(values, options);
+    setErrors(found);
+    if (Object.keys(found).length === 0) onSubmit(toRequest(values));
+  }
+
+  const field = (key: ErrorKey) => ({
+    "aria-invalid": errors[key] ? (true as const) : undefined,
+    "aria-describedby": errors[key] ? `${key}-error` : undefined,
+  });
+
+  return (
+    <form className="card trip-form" onSubmit={submit} noValidate>
+      <div className="trip-form__head">
+        <h1>Plan your holiday</h1>
+        <button type="button" className="btn btn--secondary" onClick={loadExample}>
+          Load Menon example
+        </button>
+      </div>
+
+      {serverError && (
+        <p role="alert" className="trip-form__server-error">
+          {serverError}
+        </p>
+      )}
+
+      <div className="trip-form__grid">
+        <Field id="origin" label="Departure city" error={errors.origin}>
+          <select
+            id="origin"
+            value={values.origin}
+            onChange={(e) => update({ origin: e.target.value }, "origin")}
+            {...field("origin")}
+          >
+            <option value="">Select a city</option>
+            {options.departure_cities.map((c) => (
+              <option key={c.airport} value={c.airport}>
+                {c.city} ({c.airport})
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field id="country" label="Destination country" error={errors.country}>
+          <select
+            id="country"
+            value={values.country}
+            onChange={(e) => update({ country: e.target.value }, "country")}
+            {...field("country")}
+          >
+            <option value="">Select a country</option>
+            {options.countries.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field id="startDate" label="Start date" error={errors.startDate}>
+          <input
+            id="startDate"
+            type="date"
+            value={values.startDate}
+            onChange={(e) => update({ startDate: e.target.value }, "startDate")}
+            {...field("startDate")}
+          />
+        </Field>
+
+        <Field id="nights" label="Nights" error={errors.nights}>
+          <input
+            id="nights"
+            type="number"
+            inputMode="numeric"
+            value={values.nights}
+            onChange={(e) => update({ nights: e.target.value }, "nights")}
+            {...field("nights")}
+          />
+        </Field>
+
+        <Field id="adults" label="Adults" error={errors.adults}>
+          <input
+            id="adults"
+            type="number"
+            inputMode="numeric"
+            value={values.adults}
+            onChange={(e) => update({ adults: e.target.value }, "adults")}
+            {...field("adults")}
+          />
+        </Field>
+
+        <Field id="children" label="Children">
+          <input
+            id="children"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={childCount}
+            onChange={(e) => changeChildCount(e.target.value)}
+          />
+        </Field>
+
+        {values.childAges.map((age, i) => (
+          <Field
+            key={i}
+            id={`child-age-${i}`}
+            label={`Age of child ${i + 1}`}
+            error={i === 0 ? errors.childAges : undefined}
+            errorId="childAges-error"
+          >
+            <input
+              id={`child-age-${i}`}
+              type="number"
+              inputMode="numeric"
+              value={age}
+              onChange={(e) =>
+                update(
+                  { childAges: values.childAges.map((a, j) => (j === i ? e.target.value : a)) },
+                  "childAges",
+                )
+              }
+              aria-invalid={errors.childAges ? true : undefined}
+              aria-describedby={i === 0 && errors.childAges ? "childAges-error" : undefined}
+            />
+          </Field>
+        ))}
+
+        <Field id="budget" label="Budget (INR)" error={errors.budget} wide>
+          <input
+            id="budget"
+            type="text"
+            inputMode="numeric"
+            placeholder="e.g. 3,50,000"
+            value={values.budget}
+            onChange={(e) => update({ budget: e.target.value }, "budget")}
+            {...field("budget")}
+          />
+        </Field>
+      </div>
+
+      <button type="submit" className="btn btn--primary trip-form__submit" disabled={busy}>
+        {busy ? "Building your package…" : "Build my holiday"}
+      </button>
+    </form>
+  );
+}
+
+function Field(props: {
+  id: string;
+  label: string;
+  error?: string;
+  errorId?: string;
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`field${props.wide ? " field--wide" : ""}${props.error ? " field--error" : ""}`}>
+      <label htmlFor={props.id}>{props.label}</label>
+      {props.children}
+      {props.error && (
+        <p className="field__error" id={props.errorId ?? `${props.id}-error`}>
+          {props.error}
+        </p>
+      )}
+    </div>
+  );
+}
