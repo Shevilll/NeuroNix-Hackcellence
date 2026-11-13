@@ -1,6 +1,7 @@
 import type { Messages } from "./en";
 import en from "./en";
 import * as booking from "./extra/booking";
+import * as chat from "./extra/chat";
 import enExtra from "./extra/en";
 import hiExtra from "./extra/hi";
 import * as map from "./extra/map";
@@ -10,8 +11,8 @@ import hi from "./hi";
 export type { MessageKey } from "./en";
 
 export const MESSAGES: Record<string, Messages> = {
-  en: { ...en, ...enExtra, ...visits.en, ...map.en, ...booking.en },
-  hi: { ...hi, ...hiExtra, ...visits.hi, ...map.hi, ...booking.hi },
+  en: { ...en, ...enExtra, ...visits.en, ...map.en, ...chat.en, ...booking.en },
+  hi: { ...hi, ...hiExtra, ...visits.hi, ...map.hi, ...chat.hi, ...booking.hi },
 };
 
 export type Vars = Record<string, string | number>;

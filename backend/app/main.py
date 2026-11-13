@@ -4,8 +4,9 @@ from fastapi import APIRouter, FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import check, images, options, packages, places, quick, route_map
+from app.api import chat, check, images, options, packages, places, quick, route_map
 from app.catalog.loader import load_catalog
+from app.chat.bot import ChatBot
 from app.config import Settings, load_settings
 from app.store.store import Store
 
@@ -17,6 +18,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.catalog = load_catalog(settings.data_dir)
     app.state.store = Store(settings.db_path)
+    app.state.chatbot = ChatBot(app.state.catalog, app.state.store)
 
     app.add_middleware(
         CORSMiddleware,
@@ -39,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(images.router)
     api.include_router(places.router)
     api.include_router(route_map.router)
+    api.include_router(chat.router)
     app.include_router(api)
     if settings.images_dir.is_dir():
         app.mount("/images", StaticFiles(directory=settings.images_dir), name="images")

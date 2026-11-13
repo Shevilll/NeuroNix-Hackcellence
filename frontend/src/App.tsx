@@ -1,4 +1,5 @@
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
+import ChatBot from "./components/ChatBot";
 import Icon from "./components/Icon";
 import Logo from "./components/Logo";
 import { I18nProvider, useI18n } from "./i18n/I18nProvider";
@@ -54,6 +55,7 @@ function Shell() {
           </span>
         </div>
       </footer>
+      <ChatBot />
     </div>
   );
 }
