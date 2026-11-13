@@ -230,7 +230,7 @@ For a city plan `c1 … cn` with nights `n1 … nn`:
 | Airport in | A transfer for the arrival airport, the hotel's city and area (or all areas). Pickup is the earliest time ≥ landing + 60 min that is inside the service hours. |
 | Airport out | Latest pickup such that pickup + duration ≤ departure − 180 min, inside the service hours. |
 | Between cities | One transfer from the link's `transfer_ids` on each change day, with a departure inside its service hours (on the timetable grid when `frequency_minutes` is given). |
-| Attractions | The scheduler gives every full day 1 visit (the rules allow 1–2; the traveler can add a second) in the city of that night's hotel: open that weekday, not on a closed date, the whole visit inside opening hours, no overlaps, each attraction once. On arrival and change days no visit is planned; the traveler can add one, and it must start after the traveler reaches the city. None on the last day. |
+| Attractions | The scheduler gives every full day 1 visit (the first package must have 1–2) in the city of that night's hotel: open that weekday, not on a closed date, the whole visit inside opening hours, no overlaps, each attraction once. On arrival and change days no visit is planned. The traveler can then add more visits to any day with a hotel night, as many as fit: each added visit takes the earliest free time, must be inside the attraction's opening hours, must end by 22:00, and on arrival and change days must start after the traveler reaches the city. None on the last day. |
 | Price and check | Every item is priced (section 7) and the package goes through the validator. Any violation discards it. |
 
 **Time handling.** All times are local. Inside the destination country everything shares one time zone,
@@ -260,7 +260,7 @@ message. A package is correct only when the list is empty.
 | Airport transfers | One in, one out; serves the hotel's city and area; pickup ≥ 60 min after landing; at the airport ≥ 180 min before departure; pickup and hotel-leave times inside service hours |
 | Between cities | One transfer per city change, matching `from_city`/`to_city`, inside service hours |
 | Hotels | A hotel every night, none on the last day; one hotel + one room type per city; rooms fit the travelers; `rooms_left ≥ k` every night |
-| Attractions | In the city of that night's hotel; open that day; visit inside opening hours; no overlaps; each at most once; 1–2 on every full day (first package); after arrival on arrival/change days; none on the last day |
+| Attractions | In the city of that night's hotel; open that day; visit inside opening hours; no overlaps; each at most once; 1–2 on every full day (first package only; the traveler can add more, each ending by 22:00); after arrival on arrival/change days; none on the last day |
 | Prices | Every item matches the formula below; the total is the sum of all items |
 
 | Part | Price |
@@ -306,7 +306,7 @@ Base URL: `http://localhost:8000/api`
 | `GET` | `/packages/{id}/options/flights?role=arrival_flight\|return_flight` | Valid flight alternatives with `price_diff` |
 | `GET` | `/packages/{id}/options/attractions` | Attractions that can be added, per day, with `price_diff` |
 | `GET` | `/packages/{id}/city-plans` | Every valid city plan with its total and whether it fits the budget |
-| `POST` | `/packages/{id}/changes` | One change with `expected_version`: `replace_hotel`, `replace_flight`, `add_attraction`, `remove_attraction`, `change_cities`. `422` with the reason when refused, `409` for a stale version. The answer also carries `price_diff_inr` and `warnings` (for example `OVER_BUDGET`). A removal that would leave a full day with no attraction is refused with `422` |
+| `POST` | `/packages/{id}/changes` | One change with `expected_version`: `replace_hotel`, `replace_flight`, `add_attraction`, `remove_attraction`, `change_cities`. `422` with the reason when refused, `409` for a stale version. The answer also carries `price_diff_inr` and `warnings` (for example `OVER_BUDGET`). A removal that leaves a full day with no attraction is allowed and reported as an `EMPTY_DAY` warning. An added attraction that does not fit its day (opening hours, other visits, arrival time, or ending after 22:00) is refused with `422` |
 | `GET` | `/packages/{id}/export` | Download the package as trip-format JSON |
 | `POST` | `/packages/{id}/confirm` | Book it. Needs an `Idempotency-Key` header. `409 SOLD_OUT` when the last seats or rooms are gone |
 | `GET` | `/reservations/{number}` | Reservation summary, or `404 {"detail": "not found"}` |
@@ -433,7 +433,7 @@ NeuroNix-Hackcellence/
 - City taxis to and from stations on change days are optional; they are added only when the traveler
   asks, and then priced.
 - No login and no payment: "confirm" saves the reservation in the app's own database.
-- The first package has one attraction per full day (the rules allow one or two); the traveler can add a second. A removal that would leave a full day with no visit is refused with a reason, so every package the app shows keeps 1 to 2 visits on each full day. More than two on one day is refused too.
+- The first package has one attraction per full day (the rules ask for one or two in the first package). After that the traveler decides: they can add more visits to a day, as many as fit, each inside the attraction's opening hours and ending by 22:00, and they can remove a visit; a full day left with none is reported as a warning. The rule checklist and the checker page apply "1–2 a day" only to a first package: a trip file with no `version`, or `version` 1.
 - The cheapest and fastest packages can be the same package when one is both.
 - The request has no traveler-name field, so the exported `traveler.name` is a placeholder.
 - Hotel photos are generic room photos shared by several hotels, because the hotels in the data are fictional.

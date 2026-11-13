@@ -184,7 +184,16 @@ export default function ReservationPage() {
               </p>
             )}
             <ReservationCard number={state.number} pkg={state.pkg} showPrint onDelete={() => deleteOpen(state.number)} deleting={deleting} />
-            <PackageView pkg={state.pkg} budget={state.pkg.budget_inr} eyebrow={t("res.booked")} />
+            <PackageView
+              pkg={state.pkg}
+              budget={state.pkg.budget_inr}
+              eyebrow={t("res.booked")}
+              edit={{
+                id: state.pkg.trip_id ?? "",
+                reservation: state.number,
+                onChanged: (pkg) => setState({ kind: "found", number: state.number, pkg }),
+              }}
+            />
           </>
         )}
       </main>

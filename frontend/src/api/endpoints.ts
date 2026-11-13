@@ -185,6 +185,28 @@ export async function changePackage(id: string, change: Record<string, unknown>,
   ).data;
 }
 
+/** Where a change goes: a package being planned, or a booking that is already confirmed (by its number). */
+export interface ChangeTarget {
+  id: string;
+  reservation?: string;
+}
+
+/** Edit a confirmed booking: the same changes as `changePackage`, and its seats and rooms move with it. */
+export async function changeBooking(number: string, change: Record<string, unknown>, idempotencyKey = newIdempotencyKey()) {
+  return (
+    await api.request<ChangeResult>(`/api/reservations/${number}/changes`, {
+      method: "POST",
+      body: change,
+      idempotencyKey,
+    })
+  ).data;
+}
+
+/** One change, sent to the booking when the target has a reservation number, else to the package. */
+export function sendChange(target: ChangeTarget, change: Record<string, unknown>, idempotencyKey = newIdempotencyKey()) {
+  return target.reservation ? changeBooking(target.reservation, change, idempotencyKey) : changePackage(target.id, change, idempotencyKey);
+}
+
 export async function getPackage(id: string) {
   return (await api.request<TripPackage>(`/api/packages/${id}`)).data;
 }
@@ -227,6 +249,11 @@ export async function checkTrip(trip: unknown) {
 
 export async function getImages() {
   return (await api.request<Record<string, string>>("/api/images")).data;
+}
+
+/** attraction id -> latitude and longitude, for the travel time between visits. */
+export async function getPlaces() {
+  return (await api.request<Record<string, { lat: number; lng: number }>>("/api/places")).data;
 }
 
 /** One row of images/ATTRIBUTIONS.md: who made a photo and under which licence. */

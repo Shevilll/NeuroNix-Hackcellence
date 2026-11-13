@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { newIdempotencyKey } from "../api/client";
-import { changePackage, checkTrip, type CheckReport, type TripItem, type TripPackage } from "../api/endpoints";
+import { checkTrip, sendChange, type CheckReport, type TripItem, type TripPackage } from "../api/endpoints";
 import { useI18n } from "../i18n/I18nProvider";
 import { calendarFileName, tripCalendar } from "../lib/calendar";
 import { messageFrom } from "../lib/errors";
-import { eachDay, inr, nightsBetween, timeOf } from "../lib/format";
+import { eachDay, inr, nightsBetween } from "../lib/format";
+import { IST, istOf, legBetween, localZone, toIst } from "../lib/travel";
 import BudgetBar from "./BudgetBar";
 import ChangeOptions, { CityPlanOptions, type ChangeReport, type OptionKind } from "./ChangeOptions";
 import CityRoute from "./CityRoute";
@@ -13,12 +14,15 @@ import RouteMap from "./RouteMap";
 import RuleChecklist from "./RuleChecklist";
 import Spinner from "./Spinner";
 import { usePhotos } from "./usePhotos";
+import { usePlaces } from "./usePlaces";
 import ZoomImage from "./ZoomImage";
 import "./PackageView.css";
 
 export interface EditOptions {
   /** Package id used for the change endpoints. */
   id: string;
+  /** Set for a confirmed booking: changes then go to the reservation, and its seats and rooms move with it. */
+  reservation?: string;
   onChanged: (pkg: TripPackage) => void;
 }
 
@@ -68,6 +72,17 @@ function travellers(pkg: TripPackage, count: (unit: string, n: number) => string
 
 const TYPE_TOTALS: TripItem["type"][] = ["flight", "hotel", "transfer", "attraction"];
 
+/**
+ * The UTC offset (minutes) a time of `item` is written in. The catalog gives local times: a flight
+ * from India leaves in IST and lands in destination time, a flight home the other way round, and
+ * everything else is in destination time (`local`).
+ */
+function offsetOf(item: TripItem, end: "start" | "end", local: number): number {
+  if (item.role === "arrival_flight") return end === "start" ? IST : local;
+  if (item.role === "return_flight") return end === "start" ? local : IST;
+  return local;
+}
+
 /** The whole package: a summary with the budget and rule checks, and the day-by-day plan (M4, M5). */
 export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Props) {
   const { t, ts, count, place, dayLabel, shortDate, dateRange, duration, signedInr } = useI18n();
@@ -79,6 +94,13 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
   /** The attraction being removed, while its request runs. */
   const [removing, setRemoving] = useState<string | null>(null);
   const photos = usePhotos();
+  const places = usePlaces();
+  /** The visit being dragged, and the visit it is over. */
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [dropOn, setDropOn] = useState<string | null>(null);
+  /** The day whose visits are being reordered, while its request runs. */
+  const [moving, setMoving] = useState<string | null>(null);
+  const zone = localZone(pkg.country);
 
   useEffect(() => {
     let live = true;
@@ -133,13 +155,53 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
     setRemoving(item.item_id);
     setError(null);
     try {
-      const r = await changePackage(edit.id, { op: "remove_attraction", item_id: item.item_id, expected_version: pkg.version ?? 1 }, newIdempotencyKey());
+      const r = await sendChange(edit, { op: "remove_attraction", item_id: item.item_id, expected_version: pkg.version ?? 1 }, newIdempotencyKey());
       changed(r.package, { price_diff_inr: r.price_diff_inr ?? 0, warnings: r.warnings ?? [] });
     } catch (e) {
       setError(ts(messageFrom(e, t("c.refused"), t)));
     } finally {
       setRemoving(null);
     }
+  }
+
+  /**
+   * Send one day's visits in a new order; the backend re-times them with travel time between. `movedId`
+   * is the visit that was dragged: it keeps its new place, and the others may shift so that all fit.
+   */
+  async function reorder(date: string, ids: string[], before: string[], movedId: string) {
+    if (!edit || moving || ids.join() === before.join()) return;
+    setMoving(date);
+    setError(null);
+    try {
+      const r = await sendChange(edit, { op: "reorder_attractions", date, item_ids: ids, moved_id: movedId, expected_version: pkg.version ?? 1 }, newIdempotencyKey());
+      changed(r.package, { price_diff_inr: r.price_diff_inr ?? 0, warnings: r.warnings ?? [] });
+    } catch (e) {
+      setError(ts(messageFrom(e, t("c.refused"), t)));
+    } finally {
+      setMoving(null);
+    }
+  }
+
+  /** Re-time a day saved without travel time between its visits (the backend may change the order). */
+  async function spaceVisits(date: string) {
+    if (!edit || moving) return;
+    setMoving(date);
+    setError(null);
+    try {
+      const r = await sendChange(edit, { op: "space_visits", date, expected_version: pkg.version ?? 1 }, newIdempotencyKey());
+      changed(r.package, { price_diff_inr: r.price_diff_inr ?? 0, warnings: r.warnings ?? [] });
+    } catch (e) {
+      setError(ts(messageFrom(e, t("c.refused"), t)));
+    } finally {
+      setMoving(null);
+    }
+  }
+
+  /** `ids` with `id` moved to the place of `target`. */
+  function moved(ids: string[], id: string, target: string) {
+    const rest = ids.filter((x) => x !== id);
+    rest.splice(ids.indexOf(target), 0, id);
+    return rest;
   }
 
   const toggle = (next: Panel) =>
@@ -150,6 +212,7 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
     return (
       <ChangeOptions
         id={edit.id}
+        reservation={edit.reservation}
         pkg={pkg}
         kind={panel.kind}
         params={panel.params}
@@ -204,7 +267,7 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
         )}
         {edit && panel?.kind === "cities" && (
           <div className="pkg__head-panel">
-            <CityPlanOptions id={edit.id} pkg={pkg} onChanged={changed} onClose={() => setPanel(null)} />
+            <CityPlanOptions id={edit.id} reservation={edit.reservation} pkg={pkg} onChanged={changed} onClose={() => setPanel(null)} />
           </div>
         )}
       </header>
@@ -297,6 +360,10 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
           </p>
         )}
 
+        <p className="pkg__zone">
+          <Icon name="clock" /> {t("pkg.timesIst")}
+        </p>
+
         {days.map((day, n) => {
           const dayNumber = pkg.start_date ? nightsBetween(pkg.start_date, day.date) + 1 : n + 1;
           const headingId = `day-${pkg.trip_id ?? "pkg"}-${day.date}`;
@@ -305,7 +372,17 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
           const fullDay = !!day.city && day.city === day.prevCity && day.date !== pkg.start_date;
           const tag =
             dayNumber < 1 ? t("pkg.leaveHome") : day.date === pkg.start_date ? t("pkg.arrival") : isLast ? t("pkg.flyHome") : day.city !== day.prevCity ? t("pkg.moveTo", { city: place(day.city ?? "") }) : null;
-          const canAdd = !!edit && !!day.city && visits < 2;
+          // No cap per day: the backend offers only visits that fit the day and end by 22:00.
+          const canAdd = !!edit && !!day.city;
+          const visitIds = day.items.filter((i) => i.type === "attraction").map((i) => i.item_id);
+          const canMove = !!edit && visitIds.length > 1;
+          const dayVisits = day.items.filter((i) => i.type === "attraction");
+          const noTravelTime = dayVisits.some((v, k) => {
+            const before = dayVisits[k - 1];
+            const from = before && places[before.catalog_id ?? ""];
+            const to = places[v.catalog_id ?? ""];
+            return !!(before?.end && from && to && legBetween(from, to, before.end, v.start).tight);
+          });
           return (
             <section key={day.date} className="day" aria-labelledby={headingId}>
               <div className="day__head">
@@ -319,16 +396,71 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
                 </div>
               </div>
 
+              {edit && noTravelTime && (
+                <div className="day__fix">
+                  <p>
+                    <Icon name="clock" /> {t("pkg.noTravelTime")}
+                  </p>
+                  <button type="button" className="btn btn--secondary" aria-label={t("pkg.fixTimingsOn", { date: dayLabel(day.date) })} disabled={moving !== null} onClick={() => spaceVisits(day.date)}>
+                    {moving === day.date ? <Spinner decorative /> : <Icon name="route" />} {t("pkg.fixTimings")}
+                  </button>
+                </div>
+              )}
+
               {day.items.length > 0 && (
                 <ul className="timeline">
                   {day.items.map((item) => {
+                    const prevVisit = item.type === "attraction" ? day.items.filter((i) => i.type === "attraction")[visitIds.indexOf(item.item_id) - 1] : undefined;
+                    const from = prevVisit && places[prevVisit.catalog_id ?? ""];
+                    const to = places[item.catalog_id ?? ""];
+                    const leg = prevVisit?.end && from && to ? legBetween(from, to, prevVisit.end, item.start) : null;
+                    const draggable = canMove && item.type === "attraction";
                     const photo = photos[item.catalog_id ?? ""];
-                    const start = timeOf(item.start);
-                    const end = timeOf(item.end);
-                    const endsOtherDay = item.end && item.end.slice(0, 10) !== item.start.slice(0, 10);
+                    // Every clock on the plan is India time (IST), like the travel times between visits.
+                    const from_ = istOf(item.start, offsetOf(item, "start", zone.offset));
+                    const to_ = item.end ? istOf(item.end, offsetOf(item, "end", zone.offset)) : null;
+                    const start = from_?.time ?? null;
+                    const end = to_?.time ?? null;
+                    const endsOtherDay = !!(from_ && to_ && to_.date !== from_.date);
                     const hotelNights = item.type === "hotel" && item.end ? nightsBetween(item.start, item.end) : 0;
                     return (
-                      <li key={item.item_id} className={`item item--${item.type}`}>
+                      <Fragment key={item.item_id}>
+                      {leg && (
+                        <li className="leg" role="note">
+                          <Icon name="route" className="leg__icon" />
+                          <span className="leg__text">
+                            <span className="leg__travel">{t("pkg.legTravel", { time: duration(leg.minutes), km: leg.km.toFixed(1) })}</span>
+                            <span className="leg__times">
+                              {t("pkg.legTimes", { leave: toIst(leg.leave, zone.offset), arrive: toIst(leg.arrive, zone.offset) })}
+                            </span>
+                            {leg.tight && start && <span className="leg__tight">{t("pkg.legTight", { time: start })}</span>}
+                          </span>
+                        </li>
+                      )}
+                      <li
+                        className={`item item--${item.type}${draggable ? " item--draggable" : ""}${dragging === item.item_id ? " item--dragging" : ""}${dropOn === item.item_id && dragging !== item.item_id ? " item--drop" : ""}`}
+                        draggable={draggable || undefined}
+                        aria-busy={moving === day.date || undefined}
+                        onDragStart={draggable ? (e) => {
+                          e.dataTransfer?.setData("text/plain", item.item_id);
+                          if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+                          setDragging(item.item_id);
+                        } : undefined}
+                        onDragOver={draggable ? (e) => {
+                          if (!dragging || !visitIds.includes(dragging)) return;
+                          e.preventDefault();
+                          setDropOn(item.item_id);
+                        } : undefined}
+                        onDragLeave={draggable ? () => setDropOn((d) => (d === item.item_id ? null : d)) : undefined}
+                        onDrop={draggable ? (e) => {
+                          e.preventDefault();
+                          const id = dragging;
+                          setDragging(null);
+                          setDropOn(null);
+                          if (id && visitIds.includes(id)) reorder(day.date, moved(visitIds, id, item.item_id), visitIds, id);
+                        } : undefined}
+                        onDragEnd={draggable ? () => { setDragging(null); setDropOn(null); } : undefined}
+                      >
                         <div className="item__time">
                           {item.type === "hotel" ? (
                             <span className="item__checkin">{t("pkg.checkIn")}</span>
@@ -336,10 +468,23 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
                             <>
                               <span>{start}</span>
                               {end && <span className="item__end">{end}</span>}
-                              {end && endsOtherDay && <span className="item__end">{shortDate(item.end!)}</span>}
+                              {end && endsOtherDay && <span className="item__end">{shortDate(to_!.date)}</span>}
+                              {start && <span className="item__zone">IST</span>}
                             </>
                           )}
                         </div>
+                        {draggable && (
+                          <button type="button" className="item__grip" aria-label={t("pkg.moveItem", { name: item.name })} disabled={moving !== null}
+                            onKeyDown={(e) => {
+                              const at = visitIds.indexOf(item.item_id);
+                              const to = e.key === "ArrowUp" ? at - 1 : e.key === "ArrowDown" ? at + 1 : -1;
+                              if (to < 0 || to >= visitIds.length) return;
+                              e.preventDefault();
+                              reorder(day.date, moved(visitIds, item.item_id, visitIds[to]), visitIds, item.item_id);
+                            }}>
+                            {moving === day.date ? <Spinner decorative /> : <Icon name="grip" />}
+                          </button>
+                        )}
                         <div className="item__media">
                           {photo ? <ZoomImage className="item__photo" src={photo} caption={item.name} /> : <span className="item__icon"><ItemIcon type={item.type} /></span>}
                         </div>
@@ -350,7 +495,7 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
                             {item.type === "hotel" && item.end
                               ? `${place(item.city)} · ${count("night", hotelNights)} · ${count("room", item.quantity)} · ${t("pkg.checkOut", { date: shortDate(item.end) })}`
                               : item.type === "flight"
-                                ? `${count("seat", item.quantity)}${endsOtherDay ? ` · ${t("pkg.lands", { date: shortDate(item.end!), time: end ?? "" })}` : ""}`
+                                ? `${count("seat", item.quantity)}${endsOtherDay ? ` · ${t("pkg.lands", { date: shortDate(to_!.date), time: end ?? "" })}` : ""}`
                                 : place(item.city)}
                           </span>
                           {item.warnings?.map((w) => (
@@ -381,6 +526,7 @@ export default function PackageView({ pkg, budget, edit, actions, eyebrow }: Pro
                           )}
                         </div>
                       </li>
+                      </Fragment>
                     );
                   })}
                 </ul>

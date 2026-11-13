@@ -219,7 +219,16 @@ export default function PlannerPage() {
             {result?.status === "OK" && result.package && reservation && (
               <>
                 <ReservationCard number={reservation.number} pkg={reservation.pkg} showLink />
-                <PackageView pkg={reservation.pkg} budget={reservation.pkg.budget_inr ?? budget} eyebrow={t("res.booked")} />
+                <PackageView
+                  pkg={reservation.pkg}
+                  budget={reservation.pkg.budget_inr ?? budget}
+                  eyebrow={t("res.booked")}
+                  edit={{
+                    id: reservation.pkg.trip_id ?? "",
+                    reservation: reservation.number,
+                    onChanged: (pkg) => setReservation({ number: reservation.number, pkg }),
+                  }}
+                />
               </>
             )}
             {result?.status === "OK" && result.package && !reservation && (() => {

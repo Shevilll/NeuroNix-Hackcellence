@@ -194,6 +194,21 @@
   margin-left: auto;
 }
 
+/* "All times are India time (IST)" above the days */
+.pkg__zone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: start;
+  margin: 0;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
 .day__empty {
   margin: 0;
   padding: 14px 16px;
@@ -262,6 +277,14 @@
 .item__checkin,
 .item__end {
   font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+/* "IST" under the times of an item */
+.item__zone {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
 }
 
@@ -458,6 +481,11 @@
     flex-direction: row;
     gap: 8px;
   }
+  /* In one row the start and end times need a dash between them. */
+  .item__time > .item__end:nth-child(2)::before {
+    content: "\2013";
+    margin-right: 8px;
+  }
   .item__body {
     flex: 1 1 0;
   }
@@ -471,4 +499,109 @@
   .day__tags {
     margin-left: 0;
   }
+}
+
+/* Travel time between two visits (from their latitude and longitude) */
+.leg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 16px 8px 94px;
+  border-top: 1px dashed var(--border);
+  background: var(--blue-50);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.leg__icon {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--blue-600);
+}
+
+.leg__text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+.leg__travel {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.leg__tight {
+  flex-basis: 100%;
+}
+
+.leg + .item {
+  border-top: 1px dashed var(--border);
+}
+
+/* Visits that can be dragged into a new order */
+.item--draggable {
+  cursor: grab;
+}
+
+.item--dragging {
+  opacity: 0.5;
+}
+
+.item--drop {
+  box-shadow: inset 0 3px 0 var(--blue-600);
+  background: var(--blue-100);
+}
+
+.item__grip {
+  flex: 0 0 auto;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 40px;
+  margin: 0 -6px 0 -8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--border-strong);
+  cursor: grab;
+}
+
+.item__grip:hover,
+.item__grip:focus-visible {
+  color: var(--blue-600);
+  background: var(--blue-100);
+}
+
+.item__grip:focus-visible {
+  outline: 2px solid var(--blue-600);
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  .leg {
+    padding-left: 16px;
+  }
+}
+
+/* A day saved before visits had travel time between them */
+.day__fix {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--blue-50);
+}
+
+.day__fix p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
 }

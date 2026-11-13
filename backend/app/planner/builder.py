@@ -18,6 +18,8 @@ from app.domain.timeutil import earliest_in_window, in_window, weekday_code
 from app.rules.validate import fits, validate_package
 
 DAY_START = 9 * 60
+# Latest end of a visit the traveller adds (22:00 by default); it must also fit the attraction's own hours.
+DAY_END = 22 * 60
 
 
 def _iso(moment: datetime) -> str:

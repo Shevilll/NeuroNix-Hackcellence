@@ -105,6 +105,64 @@ class Store:
         result = execute_once(self.db, scope=f"change:{pid}", key=key, body=body, action=change)
         return result.body, result.replayed
 
+    def change_reservation(self, number: str, key: str | None, body: dict[str, Any], apply, report, check=None) -> tuple[dict[str, Any], bool]:
+        """Edit a booked package through its reservation number, as one transaction. Returns (answer, replayed).
+
+        Like ``change_package``, plus the inventory: the seats and rooms the booking held are given
+        back, ``apply(package, held_seats, held_rooms)`` and ``check(package, held_seats, held_rooms)``
+        get the holds of everyone else (so the booking may keep its own seats) and may refuse the new
+        package with a message (``SoldOut``), and the new seats and rooms are taken. The reservation
+        shows the edited package, still booked. Raises ``ChangeBlocked``, ``SoldOut`` and
+        ``IdempotencyKeyReused``; when anything raises, nothing is stored.
+        """
+
+        def change(conn):
+            row = conn.execute("SELECT package_id FROM reservations WHERE number=?", (number,)).fetchone()
+            if row is None:
+                raise ChangeBlocked("missing")
+            pid = row["package_id"]
+            stored = self.packages.get(pid, conn=conn)
+            current = _public(stored)
+            if body.get("expected_version", stored.version) != stored.version:
+                raise ChangeBlocked("conflict", current)
+            old_seats, old_rooms = demand(stored.package)
+            others_seats = {r["flight_id"]: r["seats"] for r in conn.execute("SELECT flight_id, seats FROM flight_holds")}
+            others_rooms = {(r["room_id"], r["night"]): r["rooms"] for r in conn.execute("SELECT * FROM room_holds")}
+            for k, n in old_seats.items():
+                others_seats[k] = others_seats.get(k, 0) - n
+            for k, n in old_rooms.items():
+                others_rooms[k] = others_rooms.get(k, 0) - n
+            updated = apply(current, others_seats, others_rooms)
+            if check is not None and (problem := check(updated, others_seats, others_rooms)):
+                raise SoldOut(problem)
+            new_seats, new_rooms = demand(updated)
+            self._move_holds(conn, old_seats, old_rooms, -1)
+            self._move_holds(conn, new_seats, new_rooms, 1)
+            for item in updated["items"]:
+                item["status"], item["booking"] = "BOOKED", {"reference": number}
+            saved = _public(self.packages.update(pid, stored.version, updated, conn=conn))
+            answer = {"reservation_number": number, "package": saved}
+            conn.execute("UPDATE reservations SET body_json=? WHERE number=?", (json.dumps(answer), number))
+            return 200, {**answer, **report(current, updated)}
+
+        if key is None:
+            with self.db.transaction() as conn:
+                return change(conn)[1], False
+        result = execute_once(self.db, scope=f"reservation-change:{number}", key=key, body=body, action=change)
+        return result.body, result.replayed
+
+    @staticmethod
+    def _move_holds(conn, seats: dict[str, int], rooms: dict[tuple[str, str], int], sign: int) -> None:
+        """Add (sign 1) or give back (sign -1) seats per flight and rooms per (room, night)."""
+        for flight_id, n in seats.items():
+            conn.execute("INSERT INTO flight_holds VALUES (?, ?) ON CONFLICT(flight_id) DO UPDATE SET seats = seats + ?",
+                         (flight_id, sign * n, sign * n))
+        for (room_id, night), n in rooms.items():
+            conn.execute("INSERT INTO room_holds VALUES (?, ?, ?) ON CONFLICT(room_id, night) DO UPDATE SET rooms = rooms + ?",
+                         (room_id, night, sign * n, sign * n))
+        conn.execute("DELETE FROM flight_holds WHERE seats <= 0")
+        conn.execute("DELETE FROM room_holds WHERE rooms <= 0")
+
     # ----- S2 inventory
     def flight_holds(self) -> dict[str, int]:
         with self.db.transaction() as c:
@@ -117,8 +175,14 @@ class Store:
     # ----- reservations
     def get_reservation(self, number: str) -> dict[str, Any] | None:
         with self.db.transaction() as c:
-            row = c.execute("SELECT body_json FROM reservations WHERE number=?", (number,)).fetchone()
-        return json.loads(row["body_json"]) if row else None
+            row = c.execute(
+                "SELECT r.body_json, p.version FROM reservations r JOIN packages p ON p.package_id = r.package_id WHERE r.number=?",
+                (number,)).fetchone()
+        if row is None:
+            return None
+        body = json.loads(row["body_json"])
+        body["package"]["version"] = row["version"]  # the edit endpoint needs it as expected_version
+        return body
 
     def list_reservations(self) -> list[dict[str, Any]]:
         """Every reservation, newest first, as a short summary for the bookings list."""
@@ -173,8 +237,8 @@ class Store:
         conn.execute("DELETE FROM reservations WHERE number=?", (number,))
         conn.execute(
             "DELETE FROM idempotency_keys WHERE (scope='confirm' AND json_extract(response_json, '$.reservation_number')=?)"
-            " OR (scope='build' AND json_extract(response_json, '$.package_id')=?) OR scope=?",
-            (number, pid, f"change:{pid}"),
+            " OR (scope='build' AND json_extract(response_json, '$.package_id')=?) OR scope IN (?, ?)",
+            (number, pid, f"change:{pid}", f"reservation-change:{number}"),
         )
         conn.execute("DELETE FROM package_versions WHERE package_id=?", (pid,))
         conn.execute("DELETE FROM packages WHERE package_id=?", (pid,))
@@ -192,7 +256,8 @@ class Store:
             existing = conn.execute("SELECT body_json FROM reservations WHERE package_id=?", (pid,)).fetchone()
             if existing:  # this package is already booked: hand back its reservation
                 return 200, json.loads(existing["body_json"])
-            package = self.packages.get(pid, conn=conn).package
+            stored = self.packages.get(pid, conn=conn)
+            package = stored.package
             held_seats = {r["flight_id"]: r["seats"] for r in conn.execute("SELECT flight_id, seats FROM flight_holds")}
             held_rooms = {(r["room_id"], r["night"]): r["rooms"] for r in conn.execute("SELECT * FROM room_holds")}
             if check is not None and (problem := check(package, held_seats, held_rooms)):
@@ -211,7 +276,7 @@ class Store:
             booked = json.loads(json.dumps(package))
             for item in booked["items"]:
                 item["status"], item["booking"] = "BOOKED", {"reference": number}
-            body = {"reservation_number": number, "package": {**booked, "trip_id": pid}}
+            body = {"reservation_number": number, "package": {**booked, "trip_id": pid, "version": stored.version}}
             self.packages.save_booked(pid, booked, conn)
             conn.execute("INSERT INTO reservations VALUES (?, ?, ?, ?)",
                          (number, pid, json.dumps(body), datetime.now(UTC).isoformat()))

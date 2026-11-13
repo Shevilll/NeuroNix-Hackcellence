@@ -43,6 +43,8 @@ const PATHS = {
   moon: ["M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"],
   edit: ["M12 20h9", "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"],
   home: ["m3 11 9-8 9 8", "M5 10v10h14V10", "M10 20v-6h4v6"],
+  grip: ["M9 5h.01", "M15 5h.01", "M9 12h.01", "M15 12h.01", "M9 19h.01", "M15 19h.01"],
+  route: ["M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z", "M18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z", "M8 17h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16"],
 } as const;
 
 export type IconName = keyof typeof PATHS;

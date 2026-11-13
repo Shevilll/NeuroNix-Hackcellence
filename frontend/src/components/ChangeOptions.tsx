@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { newIdempotencyKey } from "../api/client";
 import {
-  changePackage,
+  sendChange,
   getCityPlans,
   getOptions2,
   type ChangeOption,
+  type ChangeTarget,
   type ChangeWarning,
   type CityPlan,
   type TripPackage,
 } from "../api/endpoints";
 import { messageFrom } from "../lib/errors";
-import { inr, timeOf } from "../lib/format";
+import { inr } from "../lib/format";
+import { IST, istOf, localZone } from "../lib/travel";
 import CityRoute from "./CityRoute";
 import { useI18n } from "../i18n/I18nProvider";
 import Icon from "./Icon";
@@ -25,6 +27,8 @@ export type OptionKind = "hotels" | "flights" | "attractions";
 
 interface Props {
   id: string;
+  /** Set when the package is already booked: changes then go to the reservation. */
+  reservation?: string;
   pkg: TripPackage;
   kind: OptionKind;
   /** Query for the options endpoint: `city` for hotels, `role` for flights. */
@@ -48,8 +52,8 @@ function diffClass(n: number) {
 }
 
 /** Apply one change with its own idempotency key, so a retry of this click is never applied twice. */
-async function apply(id: string, pkg: TripPackage, change: Record<string, unknown>) {
-  const r = await changePackage(id, { ...change, expected_version: pkg.version ?? 1 }, newIdempotencyKey());
+async function apply(target: ChangeTarget, pkg: TripPackage, change: Record<string, unknown>) {
+  const r = await sendChange(target, { ...change, expected_version: pkg.version ?? 1 }, newIdempotencyKey());
   return { pkg: r.package, report: { price_diff_inr: r.price_diff_inr ?? 0, warnings: r.warnings ?? [] } };
 }
 
@@ -57,8 +61,16 @@ async function apply(id: string, pkg: TripPackage, change: Record<string, unknow
  * G2: the valid alternatives for one part of the package, each with its price difference against
  * the current choice. Choosing one asks the backend to re-check the whole package (M6).
  */
-export default function ChangeOptions({ id, pkg, kind, params, date, title, onChanged, onClose }: Props) {
-  const { t, ts, count, shortDate, signedInr } = useI18n();
+/** A flight time in India time (IST). Flights from India leave in IST and land in destination time. */
+function FlightTime({ label, iso, offset }: { label: string; iso: string; offset: number }) {
+  const { t, shortDate } = useI18n();
+  const at = istOf(iso, offset);
+  return <span>{t(label, { date: shortDate(at?.date ?? iso), time: at?.time ?? "" })}</span>;
+}
+
+export default function ChangeOptions({ id, reservation, pkg, kind, params, date, title, onChanged, onClose }: Props) {
+  const zone = localZone(pkg.country).offset;
+  const { t, ts, count, signedInr } = useI18n();
   const [options, setOptions] = useState<ChangeOption[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +100,7 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
     setBusy(index);
     setError(null);
     try {
-      const r = await apply(id, pkg, changeFor(kind, params, o));
+      const r = await apply({ id, reservation }, pkg, changeFor(kind, params, o));
       onChanged(r.pkg, r.report);
     } catch (e) {
       setError(ts(messageFrom(e, t("c.refused"), t)));
@@ -132,8 +144,8 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
                   {o.area && <span>{o.area}</span>}
                   {o.rating !== undefined && <span>{t("opt.rating", { n: o.rating })}</span>}
                   {o.rooms !== undefined && <span>{count("room", o.rooms)}</span>}
-                  {o.depart && <span>{t("opt.departs", { date: shortDate(o.depart), time: timeOf(o.depart) ?? "" })}</span>}
-                  {o.arrive && <span>{t("opt.lands", { date: shortDate(o.arrive), time: timeOf(o.arrive) ?? "" })}</span>}
+                  {o.depart && <FlightTime label="opt.departs" iso={o.depart} offset={params.role === "arrival_flight" ? IST : zone} />}
+                  {o.arrive && <FlightTime label="opt.lands" iso={o.arrive} offset={params.role === "arrival_flight" ? zone : IST} />}
                 </span>
               </div>
               <span className={diffClass(o.price_diff)}>{signedInr(o.price_diff)}</span>
@@ -149,12 +161,31 @@ export default function ChangeOptions({ id, pkg, kind, params, date, title, onCh
   );
 }
 
+export type PriceSort = "recommended" | "low" | "high";
+export type PlacesSort = "any" | "most" | "fewest";
+
+/**
+ * Order city plans by the two dropdowns. The places order wins; the price order breaks ties
+ * (cheapest first when no price order is picked). With neither set, the backend's order is kept.
+ */
+export function sortPlans(plans: CityPlan[], price: PriceSort, places: PlacesSort): CityPlan[] {
+  if (price === "recommended" && places === "any") return plans;
+  const byPlaces = (a: CityPlan, b: CityPlan) =>
+    places === "most" ? b.cities.length - a.cities.length : places === "fewest" ? a.cities.length - b.cities.length : 0;
+  const byPrice = (a: CityPlan, b: CityPlan) =>
+    price === "high" ? b.total_inr - a.total_inr : price === "low" || places !== "any" ? a.total_inr - b.total_inr : 0;
+  return [...plans].sort((a, b) => byPlaces(a, b) || byPrice(a, b));
+}
+
 /** G3: every valid city plan for the same request, with its total. Choosing one rebuilds the package. */
-export function CityPlanOptions({ id, pkg, onChanged, onClose }: Omit<Props, "kind" | "params" | "date" | "title">) {
+export function CityPlanOptions({ id, reservation, pkg, onChanged, onClose }: Omit<Props, "kind" | "params" | "date" | "title">) {
   const { t, ts, signedInr } = useI18n();
   const [plans, setPlans] = useState<CityPlan[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [priceSort, setPriceSort] = useState<PriceSort>("recommended");
+  const [placesSort, setPlacesSort] = useState<PlacesSort>("any");
+  const sorted = useMemo(() => sortPlans(plans ?? [], priceSort, placesSort), [plans, priceSort, placesSort]);
 
   useEffect(() => {
     let live = true;
@@ -171,7 +202,7 @@ export function CityPlanOptions({ id, pkg, onChanged, onClose }: Omit<Props, "ki
     setBusy(index);
     setError(null);
     try {
-      const r = await apply(id, pkg, { op: "change_cities", cities: plan.cities, nights_per_city: plan.nights_per_city });
+      const r = await apply({ id, reservation }, pkg, { op: "change_cities", cities: plan.cities, nights_per_city: plan.nights_per_city });
       onChanged(r.pkg, r.report);
     } catch (e) {
       setError(ts(messageFrom(e, t("opt.planFail"), t)));
@@ -195,9 +226,35 @@ export function CityPlanOptions({ id, pkg, onChanged, onClose }: Omit<Props, "ki
         </p>
       )}
       {!plans && !error && <Spinner label={t("opt.buildingPlans")} showLabel />}
+      {plans && plans.length > 1 && (
+        <div className="sort-bar">
+          <label className="sort-field">
+            <span className="sort-field__label">{t("opt.sortPrice")}</span>
+            <span className="sort-field__control">
+              <select value={priceSort} disabled={busy !== null} onChange={(e) => setPriceSort(e.target.value as PriceSort)}>
+                <option value="recommended">{t("opt.sortRecommended")}</option>
+                <option value="low">{t("opt.sortLow")}</option>
+                <option value="high">{t("opt.sortHigh")}</option>
+              </select>
+              <Icon name="chevron" />
+            </span>
+          </label>
+          <label className="sort-field">
+            <span className="sort-field__label">{t("opt.sortPlaces")}</span>
+            <span className="sort-field__control">
+              <select value={placesSort} disabled={busy !== null} onChange={(e) => setPlacesSort(e.target.value as PlacesSort)}>
+                <option value="any">{t("opt.sortAny")}</option>
+                <option value="most">{t("opt.sortMost")}</option>
+                <option value="fewest">{t("opt.sortFewest")}</option>
+              </select>
+              <Icon name="chevron" />
+            </span>
+          </label>
+        </div>
+      )}
       {plans && (
         <ul className="option-list">
-          {plans.map((p, i) => (
+          {sorted.map((p, i) => (
             <li key={`${p.cities.join("-")}-${p.nights_per_city.join("-")}`} className={`option${p.current ? " option--current" : ""}`}>
               <div className="option__main">
                 <span className="option__name">

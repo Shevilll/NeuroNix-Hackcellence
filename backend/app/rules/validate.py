@@ -42,8 +42,8 @@ def validate_package(
     """Return every rule violation (``[]`` = valid).
 
     ``require_daily_attractions`` is the first-package rule "1-2 attractions on every full day".
-    A traveler may later remove attractions (M6), so changes are checked with it off: a day may
-    then have 0-2, but never more than 2.
+    The problem statement sets it for the first package only. Changes (M6) are checked with it off:
+    the traveler may remove every visit of a day or add more than two, as long as they fit.
     """
     out: list[dict[str, str]] = []
 
@@ -231,8 +231,6 @@ def validate_package(
             continue
         if require_daily_attractions and not 1 <= count <= 2:
             bad("ATTRACTION_COUNT", f"{day} needs 1-2 attractions")
-        elif count > 2:
-            bad("ATTRACTION_COUNT", f"{day} can have at most 2 attractions")
 
     # ---- total
     if not _close(package["total_inr"], sum(i["price_inr"] for i in items)):

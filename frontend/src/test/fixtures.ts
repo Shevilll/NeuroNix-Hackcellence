@@ -110,6 +110,15 @@ const okCheck = {
  * A fetch stub that answers the common endpoints. `extra` answers a URL first (it receives the
  * URL and the request init); return undefined to fall through to the defaults.
  */
+/** What /api/places returns for the tests: where some attractions are. */
+export const places: Record<string, { lat: number; lng: number }> = {
+  "ATT-TYO-004": { lat: 35.7148, lng: 139.7967 },
+  "ATT-TYO-008": { lat: 35.7146, lng: 139.7732 },
+  "ATT-TYO-009": { lat: 35.7101, lng: 139.7745 },
+  "ATT-TYO-011": { lat: 35.6595, lng: 139.7005 },
+  "ATT-KYO-002": { lat: 34.9671, lng: 135.7727 },
+};
+
 export function stubApi(extra?: (url: string, init?: RequestInit) => Response | undefined | Promise<Response | undefined>) {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -118,6 +127,7 @@ export function stubApi(extra?: (url: string, init?: RequestInit) => Response | 
     if (url === "/api/options") return reply(200, tripOptions);
     if (url === "/api/check") return reply(200, okCheck);
     if (url === "/api/images") return reply(200, {});
+    if (url === "/api/places") return reply(200, places);
     if (url === "/api/credits") return reply(200, credits);
     if (url === "/api/reservations" && (!init?.method || init.method === "GET")) return reply(200, []);
     return reply(404, { detail: "not found" });

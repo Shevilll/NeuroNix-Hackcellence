@@ -7,16 +7,25 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from app.changes.operations import ChangeRefused, apply_change, change_report, list_city_plans, list_options
 from app.domain.request import RequestInvalid, parse_request
 from app.rules.validate import validate_package
-from app.store.store import ChangeBlocked, IdempotencyKeyReused, SoldOut
+from app.store.store import ChangeBlocked, IdempotencyKeyReused, SoldOut, demand
 from app.planner.builder import build_package
 
 router = APIRouter()
 
 
-def _catalog(request: Request):
-    """The catalog minus seats and rooms already used by confirmed reservations (S2)."""
+def _catalog(request: Request, own: dict | None = None):
+    """The catalog minus seats and rooms already used by confirmed reservations (S2).
+
+    `own` is a booked package being looked at: its own seats and rooms count as free for it, or its
+    own flight would look sold out and every alternative would be refused."""
     store = request.app.state.store
     seats, rooms = store.flight_holds(), store.room_holds()
+    if own and any(i.get("status") == "BOOKED" for i in own.get("items", [])):
+        own_seats, own_rooms = demand(own)
+        seats = {f: n - own_seats.get(f, 0) for f, n in seats.items()}
+        rooms = {k: n - own_rooms.get(k, 0) for k, n in rooms.items()}
+    seats = {f: n for f, n in seats.items() if n > 0}
+    rooms = {k: n for k, n in rooms.items() if n > 0}
     base = request.app.state.catalog
     if not seats and not rooms:
         return base
@@ -130,6 +139,45 @@ def reservation(number: str, request: Request) -> dict:
     return body
 
 
+@router.post("/reservations/{number}/changes")
+def change_reservation(number: str, payload: dict, request: Request, response: Response,
+                       idempotency_key: str | None = Header(default=None)) -> dict:
+    """Edit a booking after it is confirmed: same changes as for a package, seats and rooms move with it."""
+    from datetime import date
+    base = request.app.state.catalog
+    store = request.app.state.store
+
+    def view(held_seats, held_rooms):
+        return base.with_holds({k: n for k, n in held_seats.items() if n > 0},
+                               {(r, date.fromisoformat(n)): k for (r, n), k in held_rooms.items() if k > 0})
+
+    def check(package, held_seats, held_rooms):
+        bad = [v for v in validate_package(package, view(held_seats, held_rooms)) if v["code"] in ("FLIGHT_SEATS", "ROOMS_LEFT")]
+        return bad[0]["message"] if bad else None
+
+    try:
+        body, replayed = store.change_reservation(
+            number, idempotency_key, payload,
+            apply=lambda package, seats, rooms: apply_change(package, view(seats, rooms), payload),
+            report=lambda before, after: change_report(before, after, payload),
+            check=check)
+    except ChangeRefused as refusal:
+        raise HTTPException(422, detail={"message": refusal.reason, "violations": refusal.violations}) from refusal
+    except IdempotencyKeyReused as error:
+        raise HTTPException(422, detail={"code": "IDEMPOTENCY_KEY_REUSED",
+                                         "message": "That Idempotency-Key was already used for a different request."}) from error
+    except SoldOut as gone:
+        raise HTTPException(409, detail={"code": "SOLD_OUT", "message": f"Sorry, the last seats or rooms were just booked: {gone}"}) from gone
+    except ChangeBlocked as blocked:
+        if blocked.kind == "missing":
+            raise HTTPException(404, detail="not found") from blocked
+        raise HTTPException(409, detail={"message": "The booking changed in another tab.",
+                                         "package": blocked.package}) from blocked
+    if replayed:
+        response.headers["Idempotent-Replay"] = "true"
+    return body
+
+
 @router.get("/packages/{pid}/options/{kind}")
 def options(pid: str, kind: str, request: Request, city: str | None = None, role: str | None = None) -> list:
     package = _package(request, pid)
@@ -139,12 +187,13 @@ def options(pid: str, kind: str, request: Request, city: str | None = None, role
         raise HTTPException(422, detail="city is required")
     if kind == "flights" and role not in ("arrival_flight", "return_flight"):
         raise HTTPException(422, detail="role must be arrival_flight or return_flight")
-    return list_options(package, _catalog(request), kind, city=city, role=role)
+    return list_options(package, _catalog(request, own=package), kind, city=city, role=role)
 
 
 @router.get("/packages/{pid}/city-plans")
 def city_plans_route(pid: str, request: Request) -> list:
-    return list_city_plans(_package(request, pid), _catalog(request))
+    package = _package(request, pid)
+    return list_city_plans(package, _catalog(request, own=package))
 
 
 @router.post("/packages/{pid}/changes")
@@ -154,7 +203,8 @@ def change(pid: str, payload: dict, request: Request, response: Response,
     try:
         body, replayed = request.app.state.store.change_package(
             pid, idempotency_key, payload,
-            apply=lambda package: apply_change(package, catalog, payload), report=change_report)
+            apply=lambda package: apply_change(package, catalog, payload),
+            report=lambda before, after: change_report(before, after, payload))
     except ChangeRefused as refusal:
         raise HTTPException(422, detail={"message": refusal.reason, "violations": refusal.violations}) from refusal
     except IdempotencyKeyReused as error:

@@ -89,6 +89,14 @@ def _shape_problem(pkg: Any) -> str | None:
     return None
 
 
+def _is_first_package(package: dict[str, Any]) -> bool:
+    """"1-2 attractions on every full day" is the rule for the first package only. Our export carries
+    ``version``, which is above 1 once the traveller has changed the package. A file without it (or
+    with anything that is not a whole number above 1) is checked as a first package."""
+    version = package.get("version")
+    return not (isinstance(version, int) and not isinstance(version, bool) and version > 1)
+
+
 def check_trip(package: Any, catalog: Catalog) -> dict[str, Any]:
     problem = _shape_problem(package)
     if problem is None:
@@ -98,7 +106,7 @@ def check_trip(package: Any, catalog: Catalog) -> dict[str, Any]:
                 item.setdefault("end", None)
                 item.setdefault("room_id", None)
             _infer_roles(pkg, catalog)
-            violations = validate_package(pkg, catalog)
+            violations = validate_package(pkg, catalog, require_daily_attractions=_is_first_package(pkg))
         except Exception as error:  # noqa: BLE001 - a bad file must never crash the checker
             violations = [{"code": "MALFORMED", "message": f"Could not read the trip: {error!r}"}]
     else:

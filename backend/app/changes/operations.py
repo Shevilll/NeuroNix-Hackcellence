@@ -13,9 +13,10 @@ from typing import Any
 
 from app.catalog.loader import Catalog
 from app.domain import pricing
+from app.domain.geo import travel_between
 from app.domain.request import TripRequest
 from app.domain.timeutil import format_clock, weekday_code
-from app.planner.builder import DAY_START, build_for_plan, city_plans, _arrival_transfer, _departure_transfer, hotel_options
+from app.planner.builder import DAY_END, DAY_START, build_for_plan, city_plans, _arrival_transfer, _departure_transfer, hotel_options
 from app.rules.validate import fits, validate_package
 
 
@@ -147,20 +148,22 @@ def _replace_flight(pkg, catalog, request, change):
 
 
 def _free_slot(pkg, catalog, a, day: date):
-    """Earliest start on `day` that fits the opening hours, avoids other visits and arrivals."""
+    """Earliest start on `day` that fits the opening hours, avoids other visits and arrivals, and
+    ends by DAY_END (22:00). Any number of visits a day is allowed while they fit."""
     earliest = DAY_START
     for i in pkg["items"]:
         if i["type"] == "transfer" and i.get("end") and i["end"][:10] == day.isoformat() and i["role"] != "departure_transfer":
             e = datetime.fromisoformat(i["end"])
             earliest = max(earliest, e.hour * 60 + e.minute + 30)
-    busy = sorted((datetime.fromisoformat(i["start"]), datetime.fromisoformat(i["end"]))
+    busy = sorted((datetime.fromisoformat(i["start"]), datetime.fromisoformat(i["end"]), catalog.attractions[i["catalog_id"]])
                   for i in pkg["items"] if i["type"] == "attraction" and i["start"][:10] == day.isoformat())
     start = max(earliest, a.open_from)
-    for s, e in busy:
-        if start + a.visit_minutes <= s.hour * 60 + s.minute:
+    # Leave the travel time (from latitude and longitude) after the visit before and before the next.
+    for s, e, b in busy:
+        if start + a.visit_minutes + travel_between(a, b) <= s.hour * 60 + s.minute:
             break
-        start = max(start, e.hour * 60 + e.minute)
-    return start if start + a.visit_minutes <= min(a.open_until, 1440) else None
+        start = max(start, e.hour * 60 + e.minute + travel_between(b, a))
+    return start if start + a.visit_minutes <= min(a.open_until, DAY_END) else None
 
 
 def _add_attraction(pkg, catalog, request, change):
@@ -175,7 +178,7 @@ def _add_attraction(pkg, catalog, request, change):
         raise ChangeRefused("That attraction is already in the package.")
     start = _free_slot(pkg, catalog, a, day)
     if start is None:
-        raise ChangeRefused("It does not fit on that day: opening hours, other visits or arrival time.")
+        raise ChangeRefused("It does not fit on that day: visits end by 22:00, inside opening hours, after other visits and arrival.")
     s = datetime(day.year, day.month, day.day) + timedelta(minutes=start)
     cost = pricing.attraction_cost(a, request.adults, len(request.children_ages))
     pkg["items"].append({"item_id": "", "type": "attraction", "name": a.name, "city": a.city, "status": "PLANNED",
@@ -190,6 +193,128 @@ def _remove_attraction(pkg, catalog, request, change):
         raise ChangeRefused("That attraction is not in the package.")
     pkg["items"].remove(item)
     # the validator refuses if this leaves a full day with fewer than 1 attraction
+
+
+def _visit_date(change) -> date:
+    try:
+        return date.fromisoformat(change.get("date", ""))
+    except ValueError:
+        raise ChangeRefused("Choose a date for the visit.") from None
+
+
+def _day_start(pkg, day: date) -> int:
+    """Minutes after midnight the first visit of `day` can start: DAY_START, or 30 minutes after an
+    airport or between-city transfer reaches the hotel that day."""
+    cursor = DAY_START
+    for i in pkg["items"]:
+        if i["type"] == "transfer" and i.get("end") and i["end"][:10] == day.isoformat() and i["role"] != "departure_transfer":
+            e = datetime.fromisoformat(i["end"])
+            cursor = max(cursor, e.hour * 60 + e.minute + 30)
+    return cursor
+
+
+def _plan_day(pkg, catalog, day: date, visits: list) -> str | None:
+    """Time `visits` (attraction items, in this order) from the start of `day`, with the travel
+    time between each pair of places. Sets their start and end; returns why it does not fit, or None."""
+    cursor, before, times = _day_start(pkg, day), None, []
+    for item in visits:
+        a = catalog.attractions[item["catalog_id"]]
+        if before is not None:
+            cursor += travel_between(before, a)
+        start = max(cursor, a.open_from)
+        if start + a.visit_minutes > min(a.open_until, DAY_END):
+            return f"{a.name} does not fit in that order: it would end after it closes."
+        times.append(start)
+        cursor, before = start + a.visit_minutes, a
+    midnight = datetime(day.year, day.month, day.day)
+    for item, start in zip(visits, times):
+        minutes = catalog.attractions[item["catalog_id"]].visit_minutes
+        item.update(start=_iso(midnight + timedelta(minutes=start)), end=_iso(midnight + timedelta(minutes=start + minutes)))
+    return None
+
+
+def _fitting_orders(pkg, catalog, day: date, visits: list) -> list[tuple[tuple[int, ...], int]]:
+    """Every order of any of `visits` that fits the day with the travel time between them, as
+    (indexes into `visits`, minute the last one ends). A depth-first search that stops a branch as
+    soon as a visit would end after it closes, so a full day stays quick."""
+    places = [catalog.attractions[v["catalog_id"]] for v in visits]
+    found: list[tuple[tuple[int, ...], int]] = []
+
+    def walk(order: list[int], cursor: int) -> None:
+        found.append((tuple(order), cursor))
+        for n, a in enumerate(places):
+            if n in order:
+                continue
+            start = max(cursor + (travel_between(places[order[-1]], a) if order else 0), a.open_from)
+            if start + a.visit_minutes <= min(a.open_until, DAY_END):
+                order.append(n)
+                walk(order, start + a.visit_minutes)
+                order.pop()
+
+    walk([], _day_start(pkg, day))
+    return found
+
+
+def _moves(order: tuple[int, ...]) -> int:
+    """How many visits are out of their old place (indexes in the old order)."""
+    return sum(a != b for a, b in zip(order, sorted(order)))
+
+
+def _day_visits(pkg, day: date) -> list:
+    return sorted((i for i in pkg["items"] if i["type"] == "attraction" and i["start"][:10] == day.isoformat()),
+                  key=lambda i: i["start"])
+
+
+MAX_VISITS_SEARCHED = 8  # a day rarely has more than five visits
+
+
+def _reorder_attractions(pkg, catalog, request, change):
+    """Put one day's visits in the order the traveller dragged them, re-timed from the start of the
+    day with the travel time between each pair of places (from their latitude and longitude).
+
+    When that exact order breaks an opening hour and `moved_id` names the visit that was dragged, the
+    dragged visit keeps its new place and the fewest other visits shift so that every visit fits."""
+    day = _visit_date(change)
+    today = {i["item_id"]: i for i in _day_visits(pkg, day)}
+    order = list(change.get("item_ids") or ())
+    if len(order) != len(set(order)) or set(order) != set(today):
+        raise ChangeRefused("Send every visit of that day once, in the new order.")
+    wanted = [today[i] for i in order]
+    reason = _plan_day(pkg, catalog, day, wanted)
+    if reason is None:
+        return
+    moved = change.get("moved_id")
+    if moved in order and len(order) <= MAX_VISITS_SEARCHED:
+        at = order.index(moved)
+        every = [(o, end) for o, end in _fitting_orders(pkg, catalog, day, wanted) if len(o) == len(order)]
+        if not every:
+            raise ChangeRefused(f"The visits on {_day(day)} do not all fit with time to travel between them. "
+                                "Use Fix the timings, then drag again.")
+        full = [(o, end) for o, end in every if o[at] == at]
+        if full:
+            best = min(full, key=lambda f: (_moves(f[0]), f[1], f[0]))[0]
+            _plan_day(pkg, catalog, day, [wanted[n] for n in best])
+            return
+    raise ChangeRefused(reason)
+
+
+def _space_visits(pkg, catalog, request, change):
+    """Leave the travel time between one day's visits. Keeps their order when it fits, else uses the
+    fitting order that moves the fewest visits (ties: the day ends earliest). A day too full for the
+    travel time keeps the most visits that fit, dropping later ones first; ``change_report`` names them."""
+    day = _visit_date(change)
+    visits = _day_visits(pkg, day)
+    if _plan_day(pkg, catalog, day, visits) is None:
+        return
+    fitting = _fitting_orders(pkg, catalog, day, visits) if len(visits) <= MAX_VISITS_SEARCHED else []
+    best = min(fitting, key=lambda f: (-len(f[0]), _moves(f[0]), tuple(sorted(f[0])), f[1], f[0]), default=None)
+    if best is None or not best[0]:
+        raise ChangeRefused(f"The visits on {_day(day)} do not fit with time to travel between them. Remove one and try again.")
+    kept = [visits[n] for n in best[0]]
+    for item in visits:
+        if item not in kept:
+            pkg["items"].remove(item)
+    _plan_day(pkg, catalog, day, kept)
 
 
 def _change_cities(pkg, catalog, request, change):
@@ -207,7 +332,8 @@ def _change_cities(pkg, catalog, request, change):
 
 
 OPS = {"change_cities": _change_cities, "replace_hotel": _replace_hotel, "replace_flight": _replace_flight,
-       "add_attraction": _add_attraction, "remove_attraction": _remove_attraction}
+       "add_attraction": _add_attraction, "remove_attraction": _remove_attraction,
+       "reorder_attractions": _reorder_attractions, "space_visits": _space_visits}
 
 
 def apply_change(package: dict[str, Any], catalog: Catalog, change: dict[str, Any]) -> dict[str, Any]:
@@ -283,8 +409,8 @@ def new_name(pkg: dict[str, Any], flight_id: str) -> str:
 # ------------------------------------------------------------------ G1: what a change did
 
 
-def change_report(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
-    """The price difference and the warnings a traveler should see after a change."""
+def change_report(before: dict[str, Any], after: dict[str, Any], change: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The price difference and the warnings a traveler should see after `change`."""
     warnings: list[dict[str, str]] = []
 
     over, was_over = after["total_inr"] - after["budget_inr"], before["total_inr"] - before["budget_inr"]
@@ -307,6 +433,14 @@ def change_report(before: dict[str, Any], after: dict[str, Any]) -> dict[str, An
     for day in empty_days(after):
         if day not in already:
             warnings.append({"code": "EMPTY_DAY", "message": f"{_day(day)} has no attractions planned."})
+
+    # "Fix the timings" may take visits off a day too full for the travel time between them.
+    if (change or {}).get("op") == "space_visits":
+        kept = {i["catalog_id"] for i in after["items"] if i["type"] == "attraction"}  # item ids are renumbered
+        for gone in (i for i in before["items"] if i["type"] == "attraction" and i["catalog_id"] not in kept):
+            warnings.append({"code": "VISIT_DROPPED", "message":
+                             f"{gone['name']} was taken off {_day(date.fromisoformat(gone['start'][:10]))}: "
+                             "it did not fit with time to travel between visits."})
 
     return {"price_diff_inr": after["total_inr"] - before["total_inr"], "warnings": warnings}
 
