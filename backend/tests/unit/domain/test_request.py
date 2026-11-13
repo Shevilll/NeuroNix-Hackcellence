@@ -124,3 +124,9 @@ def test_more_travelers_than_any_flight_has_seats(catalog):
 @pytest.mark.parametrize("budget", [0, -5, "350000", None, float("inf"), float("nan"), True])
 def test_budget_must_be_a_positive_number(catalog, budget):
     assert "budget" in errors_for(catalog, budget=budget)["budget"].lower()
+
+
+@pytest.mark.parametrize("value", [[], {}, ["BLR"], {"a": 1}, 7, 1.5, True])
+def test_origin_and_country_that_are_not_text_are_a_validation_error_not_a_crash(catalog, value):
+    assert "origin" in errors_for(catalog, origin=value)
+    assert "country" in errors_for(catalog, country=value)
