@@ -21,6 +21,27 @@ describe("navigation", () => {
   });
 });
 
+describe("site footer", () => {
+  it("shows a footer on every page with the photo source", async () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi()));
+    render(<App />);
+    const footer = screen.getByRole("contentinfo");
+    expect(footer).toHaveTextContent(/Build My Holiday/);
+    expect(footer).toHaveTextContent(/Wikimedia Commons/);
+  });
+});
+
+describe("/r without a number", () => {
+  it("explains where the reservation number comes from", async () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi()));
+    window.history.pushState({}, "", "/r");
+    render(<App />);
+    const help = screen.getByRole("region", { name: /where to find your number/i });
+    expect(help).toHaveTextContent(/10-digit/);
+    expect(within(help).getByRole("link", { name: /plan a trip/i })).toHaveAttribute("href", "/");
+  });
+});
+
 describe("/r/:number (M7: a reservation number opens the summary)", () => {
   it("shows the booked package for a known number", async () => {
     const booked = makePackage({ items: makePackage().items.map((i) => ({ ...i, status: "BOOKED" })) });
