@@ -321,6 +321,11 @@ def _reasons(request, catalog) -> list[dict[str, str]]:
     return out
 
 
+def build_for_plan(request: TripRequest, catalog: Catalog, order, split, objective: str = "cheapest"):
+    """The package for one chosen city plan (G3), or None when that plan cannot be built."""
+    return _build_plan(request, catalog, tuple(order), tuple(split), objective)
+
+
 def build_package(request: TripRequest, catalog: Catalog) -> dict[str, Any]:
     plans = list(city_plans(request, catalog))
     by_objective: dict[str, list[dict[str, Any]]] = {}

@@ -94,3 +94,17 @@ def test_quick_request_endpoint(settings):
     body = res.json()
     assert body["fields"]["origin"] == "DEL" and body["fields"]["country"] == "United Arab Emirates"
     assert body["fields"]["budget"] == 200000 and body["missing"] == []
+
+
+def test_city_plans_can_be_listed_and_applied(settings):
+    client = TestClient(create_app(settings))
+    built = client.post("/api/packages", json=MENON).json()
+    pid, pkg = built["package_id"], built["package"]
+    plans = client.get(f"/api/packages/{pid}/city-plans").json()
+    other = next(p for p in plans if not p["current"])
+    done = client.post(f"/api/packages/{pid}/changes", json={
+        "op": "change_cities", "cities": other["cities"], "nights_per_city": other["nights_per_city"],
+        "expected_version": pkg["version"]})
+    assert done.status_code == 200
+    new = done.json()["package"]
+    assert new["cities"] == other["cities"] and new["version"] == pkg["version"] + 1 and new["trip_id"] == pid

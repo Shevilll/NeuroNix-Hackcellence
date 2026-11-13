@@ -113,3 +113,15 @@ export interface QuickResult {
 export async function quickRequest(text: string) {
   return (await api.request<QuickResult>("/api/quick-request", { method: "POST", body: { text } })).data;
 }
+
+export interface CityPlan {
+  cities: string[];
+  nights_per_city: number[];
+  total_inr: number;
+  within_budget: boolean;
+  current: boolean;
+}
+
+export async function getCityPlans(id: string) {
+  return (await api.request<CityPlan[]>(`/api/packages/${id}/city-plans`)).data;
+}

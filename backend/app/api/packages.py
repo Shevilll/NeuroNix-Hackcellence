@@ -4,7 +4,7 @@ import json
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
-from app.changes.operations import ChangeRefused, apply_change, change_report, list_options
+from app.changes.operations import ChangeRefused, apply_change, change_report, list_city_plans, list_options
 from app.domain.request import RequestInvalid, parse_request
 from app.planner.builder import build_package
 
@@ -85,6 +85,11 @@ def options(pid: str, kind: str, request: Request, city: str | None = None, role
     if kind == "flights" and role not in ("arrival_flight", "return_flight"):
         raise HTTPException(422, detail="role must be arrival_flight or return_flight")
     return list_options(package, request.app.state.catalog, kind, city=city, role=role)
+
+
+@router.get("/packages/{pid}/city-plans")
+def city_plans_route(pid: str, request: Request) -> list:
+    return list_city_plans(_package(request, pid), request.app.state.catalog)
 
 
 @router.post("/packages/{pid}/changes")

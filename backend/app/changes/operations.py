@@ -15,7 +15,7 @@ from app.catalog.loader import Catalog
 from app.domain import pricing
 from app.domain.request import TripRequest
 from app.domain.timeutil import format_clock, weekday_code
-from app.planner.builder import DAY_START, _arrival_transfer, _departure_transfer, hotel_options
+from app.planner.builder import DAY_START, build_for_plan, city_plans, _arrival_transfer, _departure_transfer, hotel_options
 from app.rules.validate import fits, validate_package
 
 
@@ -192,7 +192,21 @@ def _remove_attraction(pkg, catalog, request, change):
     # the validator refuses if this leaves a full day with fewer than 1 attraction
 
 
-OPS = {"replace_hotel": _replace_hotel, "replace_flight": _replace_flight,
+def _change_cities(pkg, catalog, request, change):
+    """G3: rebuild the whole package for another valid city plan, keeping the same request."""
+    order, split = tuple(change.get("cities") or ()), tuple(change.get("nights_per_city") or ())
+    if (order, split) not in set(city_plans(request, catalog)):
+        raise ChangeRefused("That is not a valid city plan: each city needs at least 2 nights and a link to the next.")
+    rebuilt = build_for_plan(request, catalog, order, split)
+    if rebuilt is None:
+        raise ChangeRefused("No flights, rooms or transfers fit that city plan for your dates.")
+    keep = {k: pkg[k] for k in ("trip_id", "version") if k in pkg}
+    pkg.clear()
+    pkg.update(rebuilt)
+    pkg.update(keep)
+
+
+OPS = {"change_cities": _change_cities, "replace_hotel": _replace_hotel, "replace_flight": _replace_flight,
        "add_attraction": _add_attraction, "remove_attraction": _remove_attraction}
 
 
@@ -295,3 +309,17 @@ def change_report(before: dict[str, Any], after: dict[str, Any]) -> dict[str, An
             warnings.append({"code": "EMPTY_DAY", "message": f"{_day(day)} has no attractions planned."})
 
     return {"price_diff_inr": after["total_inr"] - before["total_inr"], "warnings": warnings}
+
+
+def list_city_plans(package: dict[str, Any], catalog: Catalog) -> list[dict[str, Any]]:
+    """G3: every city plan that builds for this request, with its total and whether it fits the budget."""
+    request = _request(package)
+    out = []
+    for order, split in city_plans(request, catalog):
+        built = build_for_plan(request, catalog, order, split)
+        if built is None:
+            continue
+        out.append({"cities": list(order), "nights_per_city": list(split), "total_inr": built["total_inr"],
+                    "within_budget": built["total_inr"] <= request.budget,
+                    "current": list(order) == package["cities"] and list(split) == package["nights_per_city"]})
+    return sorted(out, key=lambda p: (not p["within_budget"], -len(p["cities"]), p["total_inr"]))
