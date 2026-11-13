@@ -4,7 +4,7 @@ import json
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response
 
-from app.changes.operations import ChangeRefused, apply_change, list_options
+from app.changes.operations import ChangeRefused, apply_change, change_report, list_options
 from app.domain.request import RequestInvalid, parse_request
 from app.planner.builder import build_package
 
@@ -103,4 +103,4 @@ def change(pid: str, payload: dict, request: Request) -> dict:
         raise HTTPException(409, detail={"message": "This package is already booked."})
     if outcome == "conflict":
         raise HTTPException(409, detail={"message": "The package changed in another tab.", "package": store.get_package(pid)})
-    return {"package_id": pid, "package": store.get_package(pid)}
+    return {"package_id": pid, "package": store.get_package(pid), **change_report(package, updated)}
