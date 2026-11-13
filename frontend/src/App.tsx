@@ -14,6 +14,9 @@ function messageFrom(error: unknown): string {
   if (error instanceof ApiError) {
     const detail = (error.body as { detail?: unknown } | null)?.detail;
     if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object" && typeof (detail as { message?: unknown }).message === "string") {
+      return (detail as { message: string }).message;
+    }
     if (Array.isArray(detail)) {
       return detail.map((d) => (d as { msg?: string }).msg).filter(Boolean).join(" ");
     }

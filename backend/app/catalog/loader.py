@@ -6,6 +6,7 @@ so a broken file is reported completely instead of one error at a time.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from collections import defaultdict
@@ -321,6 +322,19 @@ class Catalog:
 
         self._airport_transfers = sorted(
             (t for t in transfers.values() if t.is_airport_transfer), key=lambda t: t.transfer_id
+        )
+
+    def with_holds(self, flight_seats: Mapping[str, int], room_nights: Mapping[tuple[str, date], int]) -> "Catalog":
+        """A view of the catalog with confirmed bookings subtracted (S2). The original is unchanged."""
+        flights = {
+            fid: dataclasses.replace(f, seats_left=max(0, f.seats_left - flight_seats.get(fid, 0)))
+            for fid, f in self.flights.items()
+        }
+        rooms_left = {key: max(0, n - room_nights.get(key, 0)) for key, n in self._rooms_left.items()}
+        return Catalog(
+            departure_cities=list(self.departure_cities), countries=dict(self.countries), rules=self.rules,
+            airports=dict(self.airports), flights=flights, hotels=dict(self.hotels), rooms=dict(self.rooms),
+            rooms_left=rooms_left, transfers=dict(self.transfers), attractions=dict(self.attractions),
         )
 
     # ----- places

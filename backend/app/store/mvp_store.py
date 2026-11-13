@@ -6,6 +6,7 @@ import json
 import sqlite3
 import time
 import uuid
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +16,31 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS packages (id TEXT PRIMARY KEY, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS reservations (
   number TEXT PRIMARY KEY, package_id TEXT NOT NULL UNIQUE, body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS flight_holds (flight_id TEXT PRIMARY KEY, seats INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS room_holds (
+  room_id TEXT NOT NULL, night TEXT NOT NULL, rooms INTEGER NOT NULL, PRIMARY KEY (room_id, night));
 CREATE TABLE IF NOT EXISTS idempotency (
   key TEXT NOT NULL, scope TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY (key, scope));
 """
+
+
+class SoldOut(Exception):
+    """The last seats or rooms of this package were booked by someone else."""
+
+
+def demand(package: dict[str, Any]) -> tuple[dict[str, int], dict[tuple[str, str], int]]:
+    """Seats per flight and rooms per (room, night) that a package uses."""
+    seats: dict[str, int] = {}
+    rooms: dict[tuple[str, str], int] = {}
+    for item in package["items"]:
+        if item["type"] == "flight":
+            seats[item["catalog_id"]] = seats.get(item["catalog_id"], 0) + item["quantity"]
+        elif item["type"] == "hotel":
+            start = date.fromisoformat(item["start"])
+            for n in range((date.fromisoformat(item["end"]) - start).days):
+                key = (item["room_id"], (start + timedelta(days=n)).isoformat())
+                rooms[key] = rooms.get(key, 0) + item["quantity"]
+    return seats, rooms
 
 
 class Store:
@@ -88,12 +111,20 @@ class Store:
             return "ok"
         return self._run(go)
 
+    # ----- S2 inventory
+    def flight_holds(self) -> dict[str, int]:
+        return dict(self._run(lambda c: c.execute("SELECT flight_id, seats FROM flight_holds").fetchall()))
+
+    def room_holds(self) -> dict[tuple[str, str], int]:
+        rows = self._run(lambda c: c.execute("SELECT room_id, night, rooms FROM room_holds").fetchall())
+        return {(r, n): k for r, n, k in rows}
+
     # ----- reservations
     def get_reservation(self, number: str) -> dict[str, Any] | None:
         row = self._run(lambda c: c.execute("SELECT body FROM reservations WHERE number=?", (number,)).fetchone())
         return json.loads(row[0]) if row else None
 
-    def confirm(self, pid: str, key: str) -> tuple[dict[str, Any] | None, bool]:
+    def confirm(self, pid: str, key: str, check=None) -> tuple[dict[str, Any] | None, bool]:
         """Returns (reservation, replayed). Idempotent per key and per package."""
         def go(c):
             c.execute("BEGIN IMMEDIATE")
@@ -110,6 +141,18 @@ class Store:
                     c.execute("ROLLBACK")
                     return None, False
                 package = json.loads(pkg[0])
+                held_seats = dict(c.execute("SELECT flight_id, seats FROM flight_holds").fetchall())
+                held_rooms = {(r, n): k for r, n, k in c.execute("SELECT room_id, night, rooms FROM room_holds")}
+                if check is not None:
+                    problem = check(package, held_seats, held_rooms)
+                    if problem:
+                        c.execute("ROLLBACK")
+                        raise SoldOut(problem)
+                seats, rooms = demand(package)
+                for fid, n in seats.items():
+                    c.execute("INSERT INTO flight_holds VALUES (?, ?) ON CONFLICT(flight_id) DO UPDATE SET seats = seats + ?", (fid, n, n))
+                for (rid, night), n in rooms.items():
+                    c.execute("INSERT INTO room_holds VALUES (?, ?, ?) ON CONFLICT(room_id, night) DO UPDATE SET rooms = rooms + ?", (rid, night, n, n))
                 number = generate_unique_number(
                     lambda n: c.execute("SELECT 1 FROM reservations WHERE number=?", (n,)).fetchone() is not None
                 )

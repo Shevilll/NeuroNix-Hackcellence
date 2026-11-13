@@ -6,14 +6,27 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from app.changes.operations import ChangeRefused, apply_change, change_report, list_city_plans, list_options
 from app.domain.request import RequestInvalid, parse_request
+from app.rules.validate import validate_package
+from app.store.mvp_store import SoldOut
 from app.planner.builder import build_package
 
 router = APIRouter()
 
 
+def _catalog(request: Request):
+    """The catalog minus seats and rooms already used by confirmed reservations (S2)."""
+    store = request.app.state.store
+    seats, rooms = store.flight_holds(), store.room_holds()
+    base = request.app.state.catalog
+    if not seats and not rooms:
+        return base
+    from datetime import date
+    return base.with_holds(seats, {(r, date.fromisoformat(n)): k for (r, n), k in rooms.items()})
+
+
 @router.post("/packages")
 def build(payload: dict, request: Request, idempotency_key: str | None = Header(default=None)) -> dict:
-    catalog, store = request.app.state.catalog, request.app.state.store
+    catalog, store = _catalog(request), request.app.state.store
     try:
         trip = parse_request(payload, catalog)
     except RequestInvalid as error:
@@ -59,7 +72,18 @@ def confirm(pid: str, request: Request, response: Response,
             idempotency_key: str | None = Header(default=None)) -> dict:
     if not idempotency_key:
         raise HTTPException(400, detail="Idempotency-Key header is required")
-    body, replayed = request.app.state.store.confirm(pid, idempotency_key)
+    from datetime import date
+    base = request.app.state.catalog
+
+    def check(package, held_seats, held_rooms):
+        view = base.with_holds(held_seats, {(r, date.fromisoformat(n)): k for (r, n), k in held_rooms.items()})
+        bad = [v for v in validate_package(package, view) if v["code"] in ("FLIGHT_SEATS", "ROOMS_LEFT")]
+        return bad[0]["message"] if bad else None
+
+    try:
+        body, replayed = request.app.state.store.confirm(pid, idempotency_key, check)
+    except SoldOut as gone:
+        raise HTTPException(409, detail={"code": "SOLD_OUT", "message": f"Sorry, the last seats or rooms were just booked: {gone}"}) from gone
     if body is None:
         raise HTTPException(404, detail="not found")
     if replayed:
@@ -84,12 +108,12 @@ def options(pid: str, kind: str, request: Request, city: str | None = None, role
         raise HTTPException(422, detail="city is required")
     if kind == "flights" and role not in ("arrival_flight", "return_flight"):
         raise HTTPException(422, detail="role must be arrival_flight or return_flight")
-    return list_options(package, request.app.state.catalog, kind, city=city, role=role)
+    return list_options(package, _catalog(request), kind, city=city, role=role)
 
 
 @router.get("/packages/{pid}/city-plans")
 def city_plans_route(pid: str, request: Request) -> list:
-    return list_city_plans(_package(request, pid), request.app.state.catalog)
+    return list_city_plans(_package(request, pid), _catalog(request))
 
 
 @router.post("/packages/{pid}/changes")
@@ -100,7 +124,7 @@ def change(pid: str, payload: dict, request: Request) -> dict:
     if expected != package.get("version", 1):
         raise HTTPException(409, detail={"message": "The package changed in another tab.", "package": package})
     try:
-        updated = apply_change(package, request.app.state.catalog, payload)
+        updated = apply_change(package, _catalog(request), payload)
     except ChangeRefused as refusal:
         raise HTTPException(422, detail={"message": refusal.reason, "violations": refusal.violations}) from refusal
     outcome = store.update_package(pid, updated, expected)
