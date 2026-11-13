@@ -1,0 +1,137 @@
+/* Results area: stacked cards, package timeline, change panel, tabs, lookup */
+.app-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.btn:not(.btn--primary):not(.btn--secondary) {
+  background: var(--surface);
+  color: var(--blue-600);
+  border-color: var(--border-strong);
+  min-height: 40px;
+  padding: 0 16px;
+}
+
+.btn:not(.btn--primary):not(.btn--secondary):hover {
+  background: var(--blue-50);
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tabs .btn {
+  min-height: 40px;
+}
+
+.package__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+
+.package__summary {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+}
+
+.package__summary strong {
+  color: var(--text);
+  font-size: 1.25rem;
+}
+
+.package__summary .over { color: var(--error); font-weight: 600; }
+.package__summary .left { color: var(--ok); font-weight: 600; }
+
+.day {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.day h3 {
+  font-size: 0.9375rem;
+  color: var(--blue-900);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.day ul,
+.options {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day li {
+  display: grid;
+  grid-template-columns: 28px 64px 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.day li .name span { color: var(--text-muted); }
+.day li .price { font-variant-numeric: tabular-nums; font-weight: 600; }
+.day li .note { grid-column: 3 / -1; color: var(--warn); font-size: 0.875rem; }
+
+.change__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.options li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.lookup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.lookup label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.lookup input {
+  height: 44px;
+  width: 200px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font: inherit;
+  letter-spacing: 0.08em;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .day li { grid-template-columns: 24px 56px 1fr; }
+  .day li .price { grid-column: 3; }
+}

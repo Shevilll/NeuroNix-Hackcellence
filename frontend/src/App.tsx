@@ -150,7 +150,7 @@ export default function App() {
               };
               return (
                 <>
-                  <div role="tablist" aria-label="Package choices">
+                  <div className="tabs" role="tablist" aria-label="Package choices">
                     {Object.keys(choices).map((k) => (
                       <button key={k} type="button" role="tab" aria-selected={pick === k}
                         className={pick === k ? "btn btn--primary" : "btn"} onClick={() => setPick(k)}>
@@ -175,8 +175,8 @@ export default function App() {
                 <PackageView pkg={reservation.pkg} budget={reservation.pkg.budget_inr} />
               </>
             )}
-            <form className="card" onSubmit={(e) => { e.preventDefault(); open(lookup.trim()); }}>
-              <label>Have a reservation number? <input value={lookup} onChange={(e) => setLookup(e.target.value)} inputMode="numeric" maxLength={10} /></label>{" "}
+            <form className="card lookup" onSubmit={(e) => { e.preventDefault(); open(lookup.trim()); }}>
+              <label>Have a reservation number? <input value={lookup} onChange={(e) => setLookup(e.target.value)} inputMode="numeric" maxLength={10} /></label>
               <button type="submit" className="btn">Open</button>
               {notFound && <p role="alert">Reservation not found.</p>}
             </form>

@@ -19,22 +19,36 @@ export default function PackageView({ pkg, budget }: { pkg: TripPackage; budget:
   const left = budget - pkg.total_inr;
   return (
     <section className="card" aria-label="Holiday package">
-      <h2>
-        {pkg.cities.map((c, i) => `${c} (${pkg.nights_per_city[i]}n)`).join(" → ")}
-      </h2>
-      <p>
-        <strong>Total {inr(pkg.total_inr)}</strong> · Budget {inr(budget)} ·{" "}
-        {left >= 0 ? `${inr(left)} left` : `${inr(-left)} over`}
-      </p>
+      <div className="package__head">
+        <div>
+          <h2>{pkg.cities.map((c, i) => `${c} (${pkg.nights_per_city[i]}n)`).join(" → ")}</h2>
+          <p className="package__summary">
+            <strong>{inr(pkg.total_inr)}</strong> of {inr(budget)} budget ·{" "}
+            <span className={left >= 0 ? "left" : "over"}>
+              {left >= 0 ? `${inr(left)} left` : `${inr(-left)} over`}
+            </span>
+          </p>
+        </div>
+        {pkg.trip_id && (
+          <a className="btn" href={`/api/packages/${pkg.trip_id}/export`} download>
+            Export JSON
+          </a>
+        )}
+      </div>
       {[...days.entries()].map(([day, items]) => (
         <div key={day} className="day">
           <h3>{new Date(day).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}</h3>
           <ul>
             {items.map((i) => (
               <li key={i.item_id}>
-                {ICON[i.type]} <b>{timeOf(i)}</b> {i.name} <span>({i.city})</span> — {inr(i.price_inr)}
-                {i.status === "BOOKED" && " ✔ booked"}
-                {i.warnings?.map((w) => <em key={w} role="note"> ⚠ {w}</em>)}
+                <span aria-hidden="true">{ICON[i.type]}</span>
+                <b>{timeOf(i)}</b>
+                <span className="name">
+                  {i.name} <span>({i.city})</span>
+                  {i.status === "BOOKED" && " ✔ booked"}
+                </span>
+                <span className="price">{inr(i.price_inr)}</span>
+                {i.warnings?.map((w) => <span key={w} role="note" className="note">⚠ {w}</span>)}
               </li>
             ))}
           </ul>

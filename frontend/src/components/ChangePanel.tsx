@@ -43,10 +43,10 @@ export default function ChangePanel({ id, pkg, onChanged }: { id: string; pkg: T
   return (
     <section className="card" aria-label="Change your package">
       <h3>Change your package</h3>
-      <div>{kinds.map((k) => <button key={k.label} type="button" className="btn" onClick={() => show(k)}>{k.label}</button>)}</div>
+      <div className="change__buttons">{kinds.map((k) => <button key={k.label} type="button" className="btn" onClick={() => show(k)}>{k.label}</button>)}</div>
       {message && <p role="status">{message}</p>}
       {open && (
-        <ul>
+        <ul className="options">
           {options.length === 0 && <li>No other valid options.</li>}
           {options.map((o, n) => (
             <li key={n}>
