@@ -7,7 +7,8 @@ total. When nothing fits the budget the cheapest valid package is reported (M8).
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from itertools import permutations
+from functools import lru_cache
+from itertools import permutations, product
 from typing import Any
 
 from app.catalog.loader import Catalog
@@ -169,6 +170,40 @@ def _attractions(catalog, request, stays):
     return chosen
 
 
+@lru_cache(maxsize=1024)
+def _city_cheapest(catalog, city: str, days: tuple, adults: int, children: int):
+    """Cheapest one-attraction-per-day assignment for one city (exact; cached because it depends
+    only on the city, the days and the party, never on hotels or flights).
+
+    Returns ((attraction, day, cost), ...) in day order, or None when a day cannot be filled.
+    """
+    pool = sorted(catalog.attractions_in(city), key=lambda a: a.attraction_id)
+    costs = [pricing.attraction_cost(a, adults, children) for a in pool]
+    unsuitable = [int(children > 0 and not a.child_friendly) for a in pool]
+    layer: dict[int, tuple[int, int, tuple[int, ...]]] = {0: (0, 0, ())}  # used set -> (cost, unsuitable, picks)
+    for day in days:
+        allowed = []
+        for i, a in enumerate(pool):
+            start = max(a.open_from, DAY_START)
+            if (weekday_code(day) in a.open_days and day not in a.closed_dates
+                    and start + a.visit_minutes <= a.open_until and start + a.visit_minutes <= 1440):
+                allowed.append(i)
+        following: dict[int, tuple[int, int, tuple[int, ...]]] = {}
+        for used, (cost, bad, picks) in layer.items():
+            for i in allowed:
+                if used >> i & 1:
+                    continue
+                state = (cost + costs[i], bad + unsuitable[i], picks + (i,))
+                key = used | 1 << i
+                if key not in following or state < following[key]:
+                    following[key] = state
+        if not following:
+            return None
+        layer = following
+    _, _, picks = min(layer.values())
+    return tuple((pool[i], day, costs[i]) for day, i in zip(days, picks))
+
+
 def _cheapest_visits(catalog, request, stays):
     """One attraction on every full day at the lowest total cost, each used once.
 
@@ -176,7 +211,6 @@ def _cheapest_visits(catalog, request, stays):
     attraction that is the only cheap choice for a later day. Ties prefer child-friendly places
     when there are children, then the earlier attraction id.
     """
-    children = len(request.children_ages)
     days_by_city: dict[str, list[date]] = {}
     for index, (city, first_night, nights, _opt) in enumerate(stays):
         for n in range(nights):
@@ -187,34 +221,12 @@ def _cheapest_visits(catalog, request, stays):
 
     chosen = []
     for city, days in days_by_city.items():
-        pool = sorted(catalog.attractions_in(city), key=lambda a: a.attraction_id)
-        costs = [pricing.attraction_cost(a, request.adults, children) for a in pool]
-        unsuitable = [int(children > 0 and not a.child_friendly) for a in pool]
-        layer: dict[int, tuple[int, int, tuple[int, ...]]] = {0: (0, 0, ())}  # used set -> (cost, unsuitable, picks)
-        for day in days:
-            allowed = []
-            for i, a in enumerate(pool):
-                start = max(a.open_from, DAY_START)
-                if (weekday_code(day) in a.open_days and day not in a.closed_dates
-                        and start + a.visit_minutes <= a.open_until and start + a.visit_minutes <= 1440):
-                    allowed.append(i)
-            following: dict[int, tuple[int, int, tuple[int, ...]]] = {}
-            for used, (cost, bad, picks) in layer.items():
-                for i in allowed:
-                    if used >> i & 1:
-                        continue
-                    state = (cost + costs[i], bad + unsuitable[i], picks + (i,))
-                    key = used | 1 << i
-                    if key not in following or state < following[key]:
-                        following[key] = state
-            if not following:
-                return None
-            layer = following
-        _, _, picks = min(layer.values())
-        for day, i in zip(days, picks):
-            a = pool[i]
+        picks = _city_cheapest(catalog, city, tuple(days), request.adults, len(request.children_ages))
+        if picks is None:
+            return None
+        for a, day, cost in picks:
             start = max(a.open_from, DAY_START)
-            chosen.append((a, _at(day, start), _at(day, start + a.visit_minutes), costs[i]))
+            chosen.append((a, _at(day, start), _at(day, start + a.visit_minutes), cost))
     return chosen
 
 
@@ -290,14 +302,70 @@ def _score(pkg, objective):
     return (pkg["total_inr"],)
 
 
+def _best_rated(catalog, request, order, stays, arrivals, returns, changes, finish, consider):
+    """Most hotel star-nights that fit the budget, then the lowest total.
+
+    For every city keep only the cheapest option at each star level (a dearer hotel of the same
+    stars can never help), bundling the arrival flight + transfer into the first city and the
+    return flight + transfer into the last. Those bundles are few, so every combination is tried
+    exactly. The intercity transfers and the attractions are the cheapest ones, which leaves the
+    most budget for hotels.
+    """
+    last = len(order) - 1
+
+    def bundle(i, option):
+        parts = []
+        if i == 0:
+            a = _best_arrival(catalog, request, arrivals, option[1], "best_rated")
+            if not a:
+                return None
+            parts.append(a)
+        if i == last:
+            r = _best_return(catalog, request, returns, option[1], "best_rated")
+            if not r:
+                return None
+            parts.append(r)
+        return tuple(parts)
+
+    pools = []
+    for i, (_city, _day, nights, options) in enumerate(stays):
+        tier: dict[int, tuple] = {}
+        for option in options:
+            parts = bundle(i, option)
+            if parts is None:
+                continue
+            cost = option[0] + sum(p[0] for p in parts)
+            current = tier.get(option[1].stars)
+            if current is None or cost < current[0]:
+                tier[option[1].stars] = (cost, option, parts, nights * option[1].stars)
+        if not tier:
+            return
+        pools.append(list(tier.values()))
+
+    base = [(c, d, n, o[0]) for (c, d, n, o) in stays]  # attraction cost does not depend on the hotel
+    visits = _cheapest_visits(catalog, request, base)
+    if visits is None:
+        return
+    fixed = sum(c[1][0] for c in changes) + sum(v[3] for v in visits)
+
+    combos = []
+    for combo in product(*pools):
+        total = sum(t[0] for t in combo) + fixed
+        combos.append((total > request.budget, -sum(t[3] for t in combo), total, combo))
+    combos.sort(key=lambda c: c[:3])
+    for _over, _stars, _total, combo in combos[:8]:
+        pkg = finish(combo[0][2][0], combo[-1][2][-1], [t[1] for t in combo])
+        if pkg:
+            consider(pkg)
+            return
+
+
 def _build_plan(request, catalog, order, split, objective="cheapest"):
     stays, day = [], request.start_date
     for city, nights in zip(order, split):
         options = hotel_options(catalog, request, city, day, nights)
         if not options:
             return None
-        if objective == "best_rated":
-            options = sorted(options, key=lambda o: (-o[1].stars, o[0], o[1].hotel_id, o[2].room_id))
         stays.append((city, day, nights, options))
         day += timedelta(days=nights)
     arr_airports = set().union(*(catalog.airports_serving(order[0]),))
@@ -318,7 +386,7 @@ def _build_plan(request, catalog, order, split, objective="cheapest"):
     def finish(arrival, ret, picked):
         # picked: list of chosen hotel option per stay
         chosen = [(c, d, n, picked[i]) for i, (c, d, n, _o) in enumerate(stays)]
-        visits = (_cheapest_visits if objective == "cheapest" else _attractions)(catalog, request, chosen)
+        visits = (_cheapest_visits if objective in ("cheapest", "best_rated") else _attractions)(catalog, request, chosen)
         if visits is None:
             return None
         pkg = _assemble(request, catalog, order, split, arrival, ret, chosen, changes, visits)
@@ -332,6 +400,10 @@ def _build_plan(request, catalog, order, split, objective="cheapest"):
             _add_metrics(pkg, catalog)
             if best is None or _score(pkg, objective) < _score(best, objective):
                 best = pkg
+
+    if objective == "best_rated":
+        _best_rated(catalog, request, order, stays, arrivals, returns, changes, finish, consider)
+        return best
 
     middle = [s[3][0] for s in stays]
     # The cheapest and recommended builds pick the hotel, flight and airport transfer *together*:
