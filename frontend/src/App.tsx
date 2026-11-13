@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "./api/client";
-import { buildPackage, getOptions } from "./api/endpoints";
+import { build, confirmPackage, getOptions, getReservation, type BuildResult, type TripPackage } from "./api/endpoints";
+import { newIdempotencyKey } from "./api/client";
+import PackageView from "./components/PackageView";
 import type { TripOptions, TripRequest } from "./api/types";
 import Logo from "./components/Logo";
 import Spinner from "./components/Spinner";
@@ -22,7 +24,34 @@ export default function App() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [result, setResult] = useState<BuildResult | null>(null);
+  const [budget, setBudget] = useState(0);
+  const [reservation, setReservation] = useState<{ number: string; pkg: TripPackage } | null>(null);
+  const [lookup, setLookup] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const [confirmKey] = useState(newIdempotencyKey);
+
+  async function confirm(id: string) {
+    setBusy(true);
+    try {
+      const r = await confirmPackage(id, confirmKey);
+      setReservation({ number: r.reservation_number, pkg: r.package });
+    } catch (error) {
+      setServerError(messageFrom(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function open(number: string) {
+    setNotFound(false);
+    try {
+      const r = await getReservation(number);
+      setReservation({ number: r.reservation_number, pkg: r.package });
+    } catch {
+      setNotFound(true);
+    }
+  }
 
   const load = useCallback(() => {
     setLoadFailed(false);
@@ -35,8 +64,9 @@ export default function App() {
     setBusy(true);
     setServerError(null);
     try {
-      await buildPackage(request);
-      setSubmitted(true);
+      setBudget(request.budget);
+      setReservation(null);
+      setResult(await build(request));
     } catch (error) {
       setServerError(messageFrom(error));
     } finally {
@@ -83,11 +113,47 @@ export default function App() {
         ) : (
           <>
             <TripForm options={options} onSubmit={submit} busy={busy} serverError={serverError} />
-            {submitted && (
-              <p className="submitted" role="status">
-                Package request submitted.
-              </p>
+            {result?.status === "NO_PACKAGE" && (
+              <div className="card notice" role="alert">
+                <p className="notice__title">No package is possible</p>
+                {result.reasons.map((r) => <p key={r.code} className="notice__text">{r.message}</p>)}
+              </div>
             )}
+            {result?.status === "OVER_BUDGET" && (
+              <>
+                <div className="card notice" role="alert">
+                  <p className="notice__title">Over budget</p>
+                  <p className="notice__text">
+                    The cheapest package costs ₹{result.cheapest_total.toLocaleString("en-IN")}, which is ₹
+                    {result.short_by.toLocaleString("en-IN")} more than your budget.
+                  </p>
+                  {result.suggestions.map((t) => <p key={t} className="notice__text">{t}</p>)}
+                </div>
+                <PackageView pkg={result.cheapest_package} budget={budget} />
+              </>
+            )}
+            {result?.status === "OK" && result.package && !reservation && (
+              <>
+                <PackageView pkg={result.package} budget={budget} />
+                <button type="button" className="btn btn--primary" disabled={busy} onClick={() => confirm(result.package_id)}>
+                  {busy ? "Confirming…" : "Confirm booking"}
+                </button>
+              </>
+            )}
+            {reservation && (
+              <>
+                <div className="card notice" role="status">
+                  <p className="notice__title">Reservation {reservation.number}</p>
+                  <p className="notice__text">Your holiday is booked. Keep this number to reopen the summary.</p>
+                </div>
+                <PackageView pkg={reservation.pkg} budget={reservation.pkg.budget_inr} />
+              </>
+            )}
+            <form className="card" onSubmit={(e) => { e.preventDefault(); open(lookup.trim()); }}>
+              <label>Have a reservation number? <input value={lookup} onChange={(e) => setLookup(e.target.value)} inputMode="numeric" maxLength={10} /></label>{" "}
+              <button type="submit" className="btn">Open</button>
+              {notFound && <p role="alert">Reservation not found.</p>}
+            </form>
           </>
         )}
       </main>
