@@ -85,3 +85,12 @@ def test_build_returns_three_bookable_alternatives(settings):
     assert replay["alternatives"]["fastest"]["package_id"] == built["alternatives"]["fastest"]["package_id"]
     alt = built["alternatives"]["cheapest"]
     assert client.get(f"/api/packages/{alt['package_id']}").json()["total_inr"] == alt["package"]["total_inr"]
+
+
+def test_quick_request_endpoint(settings):
+    client = TestClient(create_app(settings))
+    res = client.post("/api/quick-request", json={"text": "2 adults from Delhi to Dubai, 5 nights from 4 April, budget 2 lakh"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["fields"]["origin"] == "DEL" and body["fields"]["country"] == "United Arab Emirates"
+    assert body["fields"]["budget"] == 200000 and body["missing"] == []
