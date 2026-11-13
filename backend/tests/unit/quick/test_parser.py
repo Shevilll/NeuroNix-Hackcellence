@@ -95,3 +95,19 @@ def test_child_without_age_is_flagged(catalog):
 def test_garbage_input_is_safe(catalog):
     assert parse_quick_request("", catalog)["fields"] == {}
     assert parse_quick_request("🎉" * 50 + " 99999999999 nights", catalog)["fields"].get("nights") is None
+
+
+@pytest.mark.parametrize(("text", "adults", "ages"), [
+    ("2 adults and a 6 year old", 2, [6]),
+    ("2 adults and a 6-year-old", 2, [6]),
+    ("2 adults with a 4 yr old and a 9 year old", 2, [4, 9]),
+    ("2 adults, kids 7 yrs and 10 yrs", 2, [7, 10]),
+])
+def test_year_old_phrases(catalog, text, adults, ages):
+    fields = parse_quick_request(text, catalog)["fields"]
+    assert fields["adults"] == adults and fields["children_ages"] == ages
+
+
+def test_menon_in_natural_words(catalog):
+    r = parse_quick_request("2 adults and a 6 year old from Bengaluru to Japan 10 April, 6 nights, budget 3.5 lakh", catalog)
+    assert r["fields"]["children_ages"] == [6] and r["fields"]["nights"] == 6 and r["missing"] == []
