@@ -46,7 +46,7 @@ def _finish(pkg: dict[str, Any], catalog: Catalog) -> dict[str, Any]:
     for n, item in enumerate(pkg["items"], 1):
         item["item_id"] = f"i{n}"
     pkg["total_inr"] = sum(i["price_inr"] for i in pkg["items"])
-    problems = validate_package(pkg, catalog)
+    problems = validate_package(pkg, catalog, require_daily_attractions=False)
     if problems:
         raise ChangeRefused(problems[0]["message"], problems)
     return pkg
@@ -83,10 +83,20 @@ def _refit_airport_transfers(pkg, catalog, request):
 
 def _replace_hotel(pkg, catalog, request, change):
     item = next((i for i in pkg["items"] if i["type"] == "hotel" and i["city"] == change.get("city")), None)
-    hotel, room = catalog.hotels.get(change.get("hotel_id")), catalog.rooms.get(change.get("room_id"))
-    if item is None or hotel is None or room is None or room.hotel_id != hotel.hotel_id or hotel.city != item["city"]:
+    hotel = catalog.hotels.get(change.get("hotel_id"))
+    if item is None or hotel is None or hotel.city != item["city"]:
         raise ChangeRefused("That hotel is not available in this city.")
-    nights = (date.fromisoformat(item["end"]) - date.fromisoformat(item["start"])).days
+    first = date.fromisoformat(item["start"])
+    nights = (date.fromisoformat(item["end"]) - first).days
+    if change.get("room_id"):
+        room = catalog.rooms.get(change["room_id"])
+        if room is None or room.hotel_id != hotel.hotel_id:
+            raise ChangeRefused(f"That room type does not belong to {hotel.name}.")
+    else:  # no room named: the cheapest room type that fits the party on every night
+        fitting = [o for o in hotel_options(catalog, request, hotel.city, first, nights) if o[1].hotel_id == hotel.hotel_id]
+        if not fitting:
+            raise ChangeRefused(f"{hotel.name} has no room type that fits your party and is free on every night.")
+        room = fitting[0][2]
     k = next((k for k in range(1, request.adults + 1) if fits(request.adults, len(request.children_ages), room, k)), None)
     if k is None:
         raise ChangeRefused("That room type cannot fit your party.")
@@ -95,12 +105,41 @@ def _replace_hotel(pkg, catalog, request, change):
     _refit_airport_transfers(pkg, catalog, request)
 
 
+def _day(d: date) -> str:
+    return f"{d.day} {d:%b}"
+
+
+def _check_flight(pkg, catalog, request, role: str, f) -> None:
+    """Say plainly why a flight does not fit, before any transfer is re-timed."""
+    hotels = sorted((i for i in pkg["items"] if i["type"] == "hotel"), key=lambda i: i["start"])
+    home = pkg["traveler"]["home_airport"]
+    if role == "arrival_flight":
+        city, want, airport, ends_at_home = hotels[0]["city"], request.start_date, f.destination, f.origin == home
+        day, wrong_end = f.arrival_local.date(), f"{f.flight_id} leaves {f.origin}, not {home}."
+        verb = "lands"
+    else:
+        city, want, airport, ends_at_home = hotels[-1]["city"], request.end_date, f.origin, f.destination == home
+        day, wrong_end = f.departure_local.date(), f"{f.flight_id} goes to {f.destination}, not {home}."
+        verb = "leaves"
+    if not ends_at_home:
+        raise ChangeRefused(wrong_end)
+    if day != want:
+        raise ChangeRefused(f"{f.flight_id} {verb} on {_day(day)}; this trip needs a flight that {verb} on {_day(want)}.")
+    if city not in catalog.airports[airport].serves_cities:
+        raise ChangeRefused(f"{airport} does not serve {city}, where your {'first' if role == 'arrival_flight' else 'last'} hotel is.")
+    if f.seats_left < request.travelers:
+        raise ChangeRefused(
+            f"{f.flight_id} has only {f.seats_left} free seats; you need {request.travelers} (children need a seat too)."
+        )
+
+
 def _replace_flight(pkg, catalog, request, change):
     role = change.get("role")
     item = _find(pkg, type="flight", role=role)
     f = catalog.flights.get(change.get("flight_id"))
     if item is None or f is None:
         raise ChangeRefused("Unknown flight.")
+    _check_flight(pkg, catalog, request, role, f)
     item.update(name=f"{f.airline} {f.flight_number} {f.origin} to {f.destination}", catalog_id=f.flight_id,
                 start=_iso(f.departure_local), end=_iso(f.arrival_local),
                 price_inr=pricing.flight_cost(f.price_per_seat, request.travelers))
@@ -225,3 +264,34 @@ def list_options(package: dict[str, Any], catalog: Catalog, kind: str, **filters
 
 def new_name(pkg: dict[str, Any], flight_id: str) -> str:
     return next(i["name"] for i in pkg["items"] if i["catalog_id"] == flight_id)
+
+
+# ------------------------------------------------------------------ G1: what a change did
+
+
+def change_report(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    """The price difference and the warnings a traveler should see after a change."""
+    warnings: list[dict[str, str]] = []
+
+    over, was_over = after["total_inr"] - after["budget_inr"], before["total_inr"] - before["budget_inr"]
+    if over > 0 and was_over <= 0:
+        warnings.append({"code": "OVER_BUDGET", "message":
+                         f"This change takes the trip ₹{int(over):,} over your budget of ₹{int(after['budget_inr']):,}."})
+
+    def empty_days(pkg: dict[str, Any]) -> list[date]:
+        city_of: dict[date, str] = {}
+        for h in (i for i in pkg["items"] if i["type"] == "hotel"):
+            first = date.fromisoformat(h["start"])
+            for n in range((date.fromisoformat(h["end"]) - first).days):
+                city_of[first + timedelta(days=n)] = h["city"]
+        start = date.fromisoformat(pkg["start_date"])
+        visited = {i["start"][:10] for i in pkg["items"] if i["type"] == "attraction"}
+        return [d for d, city in sorted(city_of.items())
+                if d != start and city_of.get(d - timedelta(days=1)) == city and d.isoformat() not in visited]
+
+    already = set(empty_days(before))
+    for day in empty_days(after):
+        if day not in already:
+            warnings.append({"code": "EMPTY_DAY", "message": f"{_day(day)} has no attractions planned."})
+
+    return {"price_diff_inr": after["total_inr"] - before["total_inr"], "warnings": warnings}

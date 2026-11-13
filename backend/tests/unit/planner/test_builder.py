@@ -64,3 +64,25 @@ def test_any_result_is_valid_or_explained(catalog, origin, country, start):
         assert validate_package(result["package"], catalog) == []
     else:
         assert result["status"] == "NO_PACKAGE" and result["reasons"]
+
+
+def test_three_packages_follow_their_objectives(catalog):
+    result = build_package(menon(), catalog)
+    alts = result["alternatives"]
+    assert set(alts) == {"cheapest", "fastest", "best_rated"}
+    for pkg in alts.values():
+        assert validate_package(pkg, catalog) == []
+        assert pkg["total_inr"] <= 350000
+    everyone = [result["package"], *alts.values()]
+    assert alts["cheapest"]["total_inr"] <= min(p["total_inr"] for p in everyone)
+    assert alts["fastest"]["travel_minutes"] <= min(p["travel_minutes"] for p in everyone)
+    assert alts["best_rated"]["avg_stars"] >= max(p["avg_stars"] for p in everyone)
+
+
+@pytest.mark.parametrize("origin", ["DEL", "MAA"])
+def test_alternatives_valid_for_other_requests(catalog, origin):
+    result = build_package(menon(origin=origin, country="United Arab Emirates", nights=5,
+                                 start_date=date(2027, 4, 5), children_ages=(), budget=10**7), catalog)
+    if result["status"] == "OK":
+        for pkg in result["alternatives"].values():
+            assert validate_package(pkg, catalog) == []

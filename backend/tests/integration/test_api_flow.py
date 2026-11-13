@@ -75,3 +75,13 @@ def test_change_flow_versions_and_booked_lock(settings):
     client.post(f"/api/packages/{pid}/confirm", headers={"Idempotency-Key": "z"})
     locked = client.post(f"/api/packages/{pid}/changes", json={**body, "expected_version": 2})
     assert locked.status_code == 409
+
+
+def test_build_returns_three_bookable_alternatives(settings):
+    client = TestClient(create_app(settings))
+    built = client.post("/api/packages", json=MENON, headers={"Idempotency-Key": "alt"}).json()
+    assert set(built["alternatives"]) == {"cheapest", "fastest", "best_rated"}
+    replay = client.post("/api/packages", json=MENON, headers={"Idempotency-Key": "alt"}).json()
+    assert replay["alternatives"]["fastest"]["package_id"] == built["alternatives"]["fastest"]["package_id"]
+    alt = built["alternatives"]["cheapest"]
+    assert client.get(f"/api/packages/{alt['package_id']}").json()["total_inr"] == alt["package"]["total_inr"]

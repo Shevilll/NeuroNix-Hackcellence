@@ -28,6 +28,7 @@ export default function App() {
   const [result, setResult] = useState<BuildResult | null>(null);
   const [budget, setBudget] = useState(0);
   const [reservation, setReservation] = useState<{ number: string; pkg: TripPackage } | null>(null);
+  const [pick, setPick] = useState<string>("recommended");
   const [lookup, setLookup] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [confirmKey] = useState(newIdempotencyKey);
@@ -67,6 +68,7 @@ export default function App() {
     try {
       setBudget(request.budget);
       setReservation(null);
+      setPick("recommended");
       setResult(await build(request));
     } catch (error) {
       setServerError(messageFrom(error));
@@ -133,16 +135,37 @@ export default function App() {
                 <PackageView pkg={result.cheapest_package} budget={budget} />
               </>
             )}
-            {result?.status === "OK" && result.package && !reservation && (
-              <>
-                <PackageView pkg={result.package} budget={budget} />
-                <ChangePanel id={result.package_id} pkg={result.package}
-                  onChanged={(p) => setResult({ ...result, package: p })} />
-                <button type="button" className="btn btn--primary" disabled={busy} onClick={() => confirm(result.package_id)}>
-                  {busy ? "Confirming…" : "Confirm booking"}
-                </button>
-              </>
-            )}
+            {result?.status === "OK" && result.package && !reservation && (() => {
+              const choices: Record<string, { package_id: string; package: TripPackage }> = {
+                recommended: { package_id: result.package_id, package: result.package },
+                ...(result.alternatives ?? {}),
+              };
+              const labels: Record<string, string> = {
+                recommended: "Recommended", cheapest: "Cheapest", fastest: "Fastest", best_rated: "Best rated",
+              };
+              const current = choices[pick] ?? choices.recommended;
+              const setCurrent = (p: TripPackage) => {
+                if (pick === "recommended") setResult({ ...result, package: p });
+                else setResult({ ...result, alternatives: { ...result.alternatives!, [pick]: { ...current, package: p } } } as BuildResult);
+              };
+              return (
+                <>
+                  <div role="tablist" aria-label="Package choices">
+                    {Object.keys(choices).map((k) => (
+                      <button key={k} type="button" role="tab" aria-selected={pick === k}
+                        className={pick === k ? "btn btn--primary" : "btn"} onClick={() => setPick(k)}>
+                        {labels[k]}
+                      </button>
+                    ))}
+                  </div>
+                  <PackageView pkg={current.package} budget={budget} />
+                  <ChangePanel id={current.package_id} pkg={current.package} onChanged={setCurrent} />
+                  <button type="button" className="btn btn--primary" disabled={busy} onClick={() => confirm(current.package_id)}>
+                    {busy ? "Confirming…" : "Confirm booking"}
+                  </button>
+                </>
+              );
+            })()}
             {reservation && (
               <>
                 <div className="card notice" role="status">

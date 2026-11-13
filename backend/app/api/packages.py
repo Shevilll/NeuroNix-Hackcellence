@@ -25,6 +25,11 @@ def build(payload: dict, request: Request, idempotency_key: str | None = Header(
         pid = store.save_package(result["package"], idempotency_key)
         result["package"] = store.get_package(pid)
         result["package_id"] = pid
+        saved = {}
+        for name, alt in result.pop("alternatives").items():
+            alt_id = store.save_package(alt, f"{idempotency_key}:{name}" if idempotency_key else None)
+            saved[name] = {"package_id": alt_id, "package": store.get_package(alt_id)}
+        result["alternatives"] = saved
     return result
 
 

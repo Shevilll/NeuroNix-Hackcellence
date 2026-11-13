@@ -36,7 +36,15 @@ def fits(adults: int, children: int, room, k: int) -> bool:
     )
 
 
-def validate_package(package: dict[str, Any], catalog: Catalog) -> list[dict[str, str]]:
+def validate_package(
+    package: dict[str, Any], catalog: Catalog, *, require_daily_attractions: bool = True
+) -> list[dict[str, str]]:
+    """Return every rule violation (``[]`` = valid).
+
+    ``require_daily_attractions`` is the first-package rule "1-2 attractions on every full day".
+    A traveler may later remove attractions (M6), so changes are checked with it off: a day may
+    then have 0-2, but never more than 2.
+    """
     out: list[dict[str, str]] = []
 
     def bad(code: str, message: str) -> None:
@@ -218,8 +226,13 @@ def validate_package(package: dict[str, Any], catalog: Catalog) -> list[dict[str
                 bad("ATTRACTION_OVERLAP", f"overlapping visits on {day}")
     for n in range(1, nights):
         day = start + timedelta(days=n)
-        if day not in change_days and not 1 <= len(per_day.get(day, [])) <= 2:
+        count = len(per_day.get(day, []))
+        if day in change_days:
+            continue
+        if require_daily_attractions and not 1 <= count <= 2:
             bad("ATTRACTION_COUNT", f"{day} needs 1-2 attractions")
+        elif count > 2:
+            bad("ATTRACTION_COUNT", f"{day} can have at most 2 attractions")
 
     # ---- total
     if not _close(package["total_inr"], sum(i["price_inr"] for i in items)):

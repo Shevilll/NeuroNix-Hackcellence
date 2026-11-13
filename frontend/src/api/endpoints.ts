@@ -33,6 +33,8 @@ export interface TripItem {
 
 export interface TripPackage {
   version?: number;
+  travel_minutes?: number;
+  avg_stars?: number;
   trip_id: string;
   start_date: string;
   end_date: string;
@@ -44,7 +46,12 @@ export interface TripPackage {
 }
 
 export type BuildResult =
-  | { status: "OK"; package_id: string; package: TripPackage }
+  | {
+      status: "OK";
+      package_id: string;
+      package: TripPackage;
+      alternatives?: Record<"cheapest" | "fastest" | "best_rated", { package_id: string; package: TripPackage }>;
+    }
   | { status: "NO_PACKAGE"; reasons: { code: string; message: string }[] }
   | {
       status: "OVER_BUDGET";

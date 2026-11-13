@@ -96,29 +96,35 @@ def _departure_transfer(catalog, request, flight, hotel):
     return best
 
 
-def _best_arrival(catalog, request, flights, hotel):
+def _flight_rank(f, cost, objective):
+    return (f.duration_minutes, cost, f.flight_id) if objective == "fastest" else (cost, f.flight_id)
+
+
+def _best_arrival(catalog, request, flights, hotel, objective="cheapest"):
     best = None
     for f in flights:
         tr = _arrival_transfer(catalog, request, f, hotel)
         if tr:
             cost = pricing.flight_cost(f.price_per_seat, request.travelers) + tr[0]
-            if best is None or (cost, f.flight_id) < (best[0], best[1].flight_id):
-                best = (cost, f, tr)
-    return best
+            rank = _flight_rank(f, cost, objective)
+            if best is None or rank < best[3]:
+                best = (cost, f, tr, rank)
+    return best[:3] if best else None
 
 
-def _best_return(catalog, request, flights, hotel):
+def _best_return(catalog, request, flights, hotel, objective="cheapest"):
     best = None
     for f in flights:
         tr = _departure_transfer(catalog, request, f, hotel)
         if tr:
             cost = pricing.flight_cost(f.price_per_seat, request.travelers) + tr[0]
-            if best is None or (cost, f.flight_id) < (best[0], best[1].flight_id):
-                best = (cost, f, tr)
-    return best
+            rank = _flight_rank(f, cost, objective)
+            if best is None or rank < best[3]:
+                best = (cost, f, tr, rank)
+    return best[:3] if best else None
 
 
-def _intercity(catalog, request, a: str, b: str, day: date):
+def _intercity(catalog, request, a: str, b: str, day: date, objective: str = "cheapest"):
     best = None
     for t in catalog.intercity_transfers(a, b):
         pick = 600
@@ -130,9 +136,10 @@ def _intercity(catalog, request, a: str, b: str, day: date):
         if pick >= 1440:
             continue
         cost = pricing.transfer_cost(t, request.adults, len(request.children_ages))
-        if best is None or (cost, t.transfer_id) < (best[0], best[1].transfer_id):
-            best = (cost, t, _at(day, pick))
-    return best
+        rank = (t.duration_minutes, cost, t.transfer_id) if objective == "fastest" else (cost, t.transfer_id)
+        if best is None or rank < best[3]:
+            best = (cost, t, _at(day, pick), rank)
+    return best[:3] if best else None
 
 
 def _attractions(catalog, request, stays):
@@ -210,12 +217,38 @@ def _assemble(request, catalog, order, split, arrival, ret, stays, changes, visi
     }
 
 
-def _build_plan(request, catalog, order, split):
+def _add_metrics(pkg, catalog):
+    """travel_minutes (G4 fastest) and avg_stars per night (G4 best rated)."""
+    minutes = 0
+    for i in pkg["items"]:
+        if i["type"] == "flight":
+            minutes += catalog.flights[i["catalog_id"]].duration_minutes
+        elif i.get("role") == "intercity_transfer":
+            minutes += catalog.transfers[i["catalog_id"]].duration_minutes
+    nights = stars = 0
+    for i in pkg["items"]:
+        if i["type"] == "hotel":
+            n = (date.fromisoformat(i["end"]) - date.fromisoformat(i["start"])).days
+            nights, stars = nights + n, stars + n * catalog.hotels[i["catalog_id"]].stars
+    pkg["travel_minutes"], pkg["avg_stars"] = minutes, round(stars / nights, 2)
+
+
+def _score(pkg, objective):
+    if objective == "fastest":
+        return (pkg["travel_minutes"], pkg["total_inr"])
+    if objective == "best_rated":
+        return (-pkg["avg_stars"], pkg["total_inr"])
+    return (pkg["total_inr"],)
+
+
+def _build_plan(request, catalog, order, split, objective="cheapest"):
     stays, day = [], request.start_date
     for city, nights in zip(order, split):
         options = hotel_options(catalog, request, city, day, nights)
         if not options:
             return None
+        if objective == "best_rated":
+            options = sorted(options, key=lambda o: (-o[1].stars, o[0], o[1].hotel_id, o[2].room_id))
         stays.append((city, day, nights, options))
         day += timedelta(days=nights)
     arr_airports = set().union(*(catalog.airports_serving(order[0]),))
@@ -228,7 +261,7 @@ def _build_plan(request, catalog, order, split):
 
     changes = []
     for i in range(1, len(order)):
-        ch = _intercity(catalog, request, order[i - 1], order[i], stays[i][1])
+        ch = _intercity(catalog, request, order[i - 1], order[i], stays[i][1], objective)
         if ch is None:
             return None
         changes.append(((order[i - 1], order[i]), ch))
@@ -246,18 +279,20 @@ def _build_plan(request, catalog, order, split):
 
     def consider(pkg):
         nonlocal best
-        if pkg and (best is None or pkg["total_inr"] < best["total_inr"]):
-            best = pkg
+        if pkg:
+            _add_metrics(pkg, catalog)
+            if best is None or _score(pkg, objective) < _score(best, objective):
+                best = pkg
 
     middle = [s[3][0] for s in stays]
     if len(order) == 1:
         for opt in stays[0][3][:12]:
-            a, r = _best_arrival(catalog, request, arrivals, opt[1]), _best_return(catalog, request, returns, opt[1])
+            a, r = _best_arrival(catalog, request, arrivals, opt[1], objective), _best_return(catalog, request, returns, opt[1], objective)
             if a and r:
                 consider(finish(a, r, [opt]))
     else:
-        first = next(((o, a) for o in stays[0][3] if (a := _best_arrival(catalog, request, arrivals, o[1]))), None)
-        last = next(((o, r) for o in stays[-1][3] if (r := _best_return(catalog, request, returns, o[1]))), None)
+        first = next(((o, a) for o in stays[0][3] if (a := _best_arrival(catalog, request, arrivals, o[1], objective))), None)
+        last = next(((o, r) for o in stays[-1][3] if (r := _best_return(catalog, request, returns, o[1], objective))), None)
         if first and last:
             picked = [first[0], *middle[1:-1], last[0]]
             consider(finish(first[1], last[1], picked))
@@ -287,21 +322,27 @@ def _reasons(request, catalog) -> list[dict[str, str]]:
 
 
 def build_package(request: TripRequest, catalog: Catalog) -> dict[str, Any]:
-    candidates = []
-    for order, split in city_plans(request, catalog):
-        pkg = _build_plan(request, catalog, order, split)
-        if pkg:
-            candidates.append(pkg)
+    plans = list(city_plans(request, catalog))
+    by_objective: dict[str, list[dict[str, Any]]] = {}
+    for objective in ("cheapest", "fastest", "best_rated"):
+        found = (_build_plan(request, catalog, order, split, objective) for order, split in plans)
+        by_objective[objective] = [p for p in found if p]
+    candidates = by_objective["cheapest"]
     if not candidates:
         return {"status": "NO_PACKAGE", "reasons": _reasons(request, catalog)}
     within = [p for p in candidates if p["total_inr"] <= request.budget]
-    if within:
-        best = min(within, key=lambda p: (-len(p["cities"]), p["total_inr"]))
-        return {"status": "OK", "package": best}
-    cheapest = min(candidates, key=lambda p: p["total_inr"])
-    short = cheapest["total_inr"] - request.budget
-    return {
-        "status": "OVER_BUDGET", "cheapest_total": cheapest["total_inr"], "budget": request.budget,
-        "short_by": short, "cheapest_package": cheapest,
-        "suggestions": [f"Raise the budget by about ₹{short:,.0f}, or try fewer nights or other dates."],
-    }
+    if not within:
+        cheapest = min(candidates, key=lambda p: p["total_inr"])
+        short = cheapest["total_inr"] - request.budget
+        return {
+            "status": "OVER_BUDGET", "cheapest_total": cheapest["total_inr"], "budget": request.budget,
+            "short_by": short, "cheapest_package": cheapest,
+            "suggestions": [f"Raise the budget by about ₹{short:,.0f}, or try fewer nights or other dates."],
+        }
+    best = min(within, key=lambda p: (-len(p["cities"]), p["total_inr"]))
+    alternatives = {}
+    for objective, found in by_objective.items():
+        ok = [p for p in found if p["total_inr"] <= request.budget]
+        alternatives[objective] = dict(min(ok, key=lambda p: _score(p, objective)) if ok else min(within, key=lambda p: _score(p, objective)))
+        alternatives[objective]["objective"] = objective
+    return {"status": "OK", "package": best, "alternatives": alternatives}
