@@ -254,6 +254,38 @@ describe("QuickRequest: spoken replies when something goes wrong", () => {
     expect(spoken).toEqual([]);
   });
 
+  it("reads a Hindi reply with the Hindi voice", async () => {
+    const said: { text: string; lang: string; voice: unknown }[] = [];
+    const lekha = { lang: "hi-IN", name: "Lekha" };
+    vi.stubGlobal("speechSynthesis", {
+      speak: vi.fn((u: FakeUtterance) => said.push({ text: u.text, lang: u.lang, voice: u.voice })),
+      cancel: vi.fn(),
+      getVoices: () => [{ lang: "en-US", name: "Samantha" }, lekha],
+    });
+    parse.mockResolvedValue({ fields: {}, missing: [], unclear: [], language: "hi" });
+    render(<QuickRequest onParsed={() => {}} />);
+    await speak("मुझे घूमना है");
+    await waitFor(() => expect(said).toHaveLength(1));
+    expect(said[0].text).toMatch(/जानकारी नहीं मिली/);
+    expect(said[0].lang).toBe("hi-IN");
+    expect(said[0].voice).toBe(lekha);
+  });
+
+  it("says in writing when the device has no Hindi voice, instead of reading it in English", async () => {
+    const synth = {
+      speak: vi.fn(),
+      cancel: vi.fn(),
+      getVoices: () => [{ lang: "en-US", name: "Samantha" }, { lang: "en-IN", name: "Rishi" }],
+    };
+    vi.stubGlobal("speechSynthesis", synth);
+    parse.mockResolvedValue({ fields: {}, missing: [], unclear: [], language: "hi" });
+    render(<QuickRequest onParsed={() => {}} />);
+    await speak("मुझे घूमना है");
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/जानकारी नहीं मिली/));
+    expect(synth.speak).not.toHaveBeenCalled();
+    expect(screen.getByText(/no हिन्दी voice/i)).toBeInTheDocument();
+  });
+
   it("hides the spoken-reply option when the browser cannot speak", () => {
     vi.stubGlobal("speechSynthesis", undefined);
     render(<QuickRequest onParsed={() => {}} />);

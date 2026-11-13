@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { quickRequest, type QuickResult } from "../api/endpoints";
 import { useI18n } from "../i18n/I18nProvider";
-import { isSupported, speechLocale } from "../i18n/languages";
+import { isSupported, languageByCode, speechLocale } from "../i18n/languages";
 import { canSpeak, setVoiceReplies, speak, speechRecognition, stopSpeaking, voiceRepliesOn, type Recognition } from "../lib/speech";
 import Icon from "./Icon";
 import Spinner from "./Spinner";
@@ -22,6 +22,8 @@ interface Note {
   text: string;
   /** A problem the traveler has to act on (read aloud after a spoken request). */
   problem: boolean;
+  /** Set when the reply could not be read aloud: the language with no voice on this device. */
+  noVoice?: string;
 }
 
 export default function QuickRequest({ onParsed }: { onParsed: (r: QuickResult) => void }) {
@@ -62,7 +64,11 @@ export default function QuickRequest({ onParsed }: { onParsed: (r: QuickResult) 
   /** Show a message; after a spoken request, also say it aloud when it is a problem. */
   function tell(next: Note, viaVoice: boolean, replyLang = lang) {
     setNote(next);
-    if (viaVoice && next.problem && repliesOn.current && speechOut) speak(next.text, speechLocale(replyLang));
+    if (viaVoice && next.problem && repliesOn.current && speechOut) {
+      speak(next.text, speechLocale(replyLang), () =>
+        setNote((shown) => (shown === next ? { ...next, noVoice: languageByCode(replyLang).name } : shown)),
+      );
+    }
   }
 
   async function read(request = text, viaVoice = false) {
@@ -275,6 +281,7 @@ export default function QuickRequest({ onParsed }: { onParsed: (r: QuickResult) 
           <p role="status" className={`quick__note${note.problem ? " quick__note--problem" : ""}`}>
             {note.problem && <Icon name="info" />}
             {note.text}
+            {note.noVoice && <span className="quick__novoice"> {t("voice.noVoice", { language: note.noVoice })}</span>}
           </p>
         ) : (
           <p className="quick__note">{t("quick.hint")}</p>

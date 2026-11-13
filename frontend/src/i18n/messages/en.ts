@@ -93,6 +93,7 @@ const en = {
   "voice.network": "Voice input could not reach the browser's speech service. Please type your trip instead.",
   "voice.language": "This browser cannot listen in this language here. Please type your trip instead.",
   "voice.stopped": "Voice input stopped. Please try again, or type your trip instead.",
+  "voice.noVoice": "This device has no {language} voice, so this message was not read aloud.",
 
   "form.title": "Tell us about your trip",
   "form.examples": "Load an example",

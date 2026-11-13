@@ -43,21 +43,84 @@ export function canSpeak(): boolean {
   return typeof window !== "undefined" && !!window.speechSynthesis && typeof window.SpeechSynthesisUtterance === "function";
 }
 
-/** Say a short message aloud, replacing anything still being said. Prefers an Indian English voice. */
-export function speak(text: string, locale = "en-IN"): void {
+interface VoiceLike {
+  lang: string;
+}
+
+const normalLocale = (tag: string | undefined) => (tag ?? "").replace(/_/g, "-").toLowerCase();
+
+/**
+ * The best voice for a locale: the exact locale first (hi-IN, also written hi_IN on Android), then any
+ * voice of the same language. Never a voice of another language: an English voice reading Hindi skips
+ * the Devanagari and says only the punctuation.
+ */
+export function pickVoice<V extends VoiceLike>(voices: readonly V[], locale: string): V | undefined {
+  const want = normalLocale(locale);
+  const base = want.split("-")[0];
+  return (
+    voices.find((v) => normalLocale(v.lang) === want) ??
+    voices.find((v) => normalLocale(v.lang).split("-")[0] === base)
+  );
+}
+
+/** How long to wait for the browser's voice list (Chrome fills it a moment after page load). */
+const VOICE_WAIT_MS = 1500;
+/** Cancels a reply still waiting for voices, so only the latest message is said. */
+let pendingReply: (() => void) | null = null;
+
+/**
+ * Say a short message aloud in the given locale, replacing anything still being said. A language other
+ * than English is only said with a voice of its own: without one the browser falls back to its default
+ * English voice, which skips the Devanagari and reads only the punctuation ("comma"). Then nothing is
+ * said and `onNoVoice` is called so the page can say so in writing.
+ */
+export function speak(text: string, locale = "en-IN", onNoVoice?: () => void): void {
   if (!canSpeak()) return;
   const synth = window.speechSynthesis;
   synth.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = locale;
-  utterance.rate = 1;
-  const voices = synth.getVoices?.() ?? [];
-  const voice = voices.find((v) => v.lang === locale) ?? voices.find((v) => v.lang?.startsWith(locale.slice(0, 2)));
-  if (voice) utterance.voice = voice;
-  synth.speak(utterance);
+  pendingReply?.();
+  pendingReply = null;
+  const english = normalLocale(locale).startsWith("en");
+
+  const say = () => {
+    const voices = synth.getVoices?.() ?? [];
+    const voice = pickVoice(voices, locale);
+    if (!voice && (voices.length > 0 || !english)) {
+      onNoVoice?.();
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = locale;
+    utterance.rate = 1;
+    if (voice) utterance.voice = voice;
+    synth.speak(utterance);
+  };
+
+  if ((synth.getVoices?.() ?? []).length > 0 || typeof synth.addEventListener !== "function") {
+    say();
+    return;
+  }
+
+  // No voices yet: wait for them so a Hindi reply gets a Hindi voice, not the default English one.
+  let done = false;
+  const finish = (run: boolean) => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    synth.removeEventListener("voiceschanged", onVoices);
+    if (pendingReply === cancel) pendingReply = null;
+    if (run) say();
+  };
+  const onVoices = () => finish(true);
+  const cancel = () => finish(false);
+  const timer = setTimeout(() => finish(true), VOICE_WAIT_MS);
+  synth.addEventListener("voiceschanged", onVoices);
+  pendingReply = cancel;
 }
 
 export function stopSpeaking(): void {
+  pendingReply?.();
+  pendingReply = null;
   if (canSpeak()) window.speechSynthesis.cancel();
 }
 
