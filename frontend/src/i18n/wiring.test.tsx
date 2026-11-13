@@ -25,7 +25,8 @@ describe("the whole app", () => {
     render(<App />);
     const picker = screen.getByRole("combobox", { name: /language/i });
     expect(screen.getByRole("link", { name: /plan a trip/i })).toBeInTheDocument();
-    await userEvent.selectOptions(picker, "hi");
+    await userEvent.click(picker);
+    await userEvent.click(screen.getByRole("option", { name: "हिन्दी" }));
     expect(screen.getByRole("link", { name: hi["nav.plan"] })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: hi["nav.bookings"] })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(hi["hero.title"]);

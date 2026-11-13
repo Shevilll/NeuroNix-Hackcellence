@@ -70,10 +70,16 @@ describe("provider and switcher", () => {
   it("starts in English, changes language from the picker and remembers it", async () => {
     render(<I18nProvider><LanguageSwitcher /><Probe /></I18nProvider>);
     expect(screen.getByTestId("probe")).toHaveTextContent("en:Plan a trip");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: /language/i }), "hi");
+    await userEvent.click(screen.getByRole("combobox", { name: /language/i }));
+    await userEvent.click(screen.getByRole("option", { name: "हिन्दी" }));
     expect(screen.getByTestId("probe")).toHaveTextContent(`hi:${MESSAGES.hi["nav.plan"]}`);
     expect(document.documentElement.lang).toBe("hi");
     expect(localStorage.getItem("bmh.lang")).toBe("hi");
+  });
+
+  it("draws its own menu instead of the browser's native dropdown", () => {
+    render(<I18nProvider><LanguageSwitcher /></I18nProvider>);
+    expect(document.querySelector("select")).toBeNull();
   });
 
   it("restores the saved language on the next visit", () => {
