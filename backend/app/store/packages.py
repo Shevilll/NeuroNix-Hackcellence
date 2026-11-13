@@ -119,6 +119,13 @@ class PackageRepo:
             with self.db.transaction() as c:
                 write(c)
 
+    def save_booked(self, package_id: str, package: dict[str, Any], conn) -> None:
+        """Store the booked copy (items marked BOOKED) inside the confirm transaction."""
+        conn.execute(
+            "UPDATE packages SET status='BOOKED', package_json=?, updated_at=? WHERE package_id=?",
+            (json.dumps(package), _now(), package_id),
+        )
+
     def history(self, package_id: str) -> list[PackageVersion]:
         with self.db.transaction() as c:
             rows = c.execute(

@@ -1,0 +1,136 @@
+"""The app's persistence facade: packages, idempotent build/confirm, reservations, inventory holds.
+
+Built on the three small pieces in this package: ``Database`` (connections and transactions),
+``PackageRepo`` (versioned packages) and ``execute_once`` (idempotency keys). Confirm runs as one
+transaction: replay check, re-validation against holds, holds, reservation, booked package.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+from app.store.db import Database
+from app.store.idempotency import IdempotencyKeyReused, execute_once
+from app.store.packages import PackageRepo, VersionConflict
+from app.store.reservations import generate_unique_number
+
+__all__ = ["IdempotencyKeyReused", "SoldOut", "Store", "demand"]
+
+
+class SoldOut(Exception):
+    """The last seats or rooms of this package were booked by someone else."""
+
+
+def demand(package: dict[str, Any]) -> tuple[dict[str, int], dict[tuple[str, str], int]]:
+    """Seats per flight and rooms per (room, night) that a package uses."""
+    seats: dict[str, int] = {}
+    rooms: dict[tuple[str, str], int] = {}
+    for item in package["items"]:
+        if item["type"] == "flight":
+            seats[item["catalog_id"]] = seats.get(item["catalog_id"], 0) + item["quantity"]
+        elif item["type"] == "hotel":
+            start = date.fromisoformat(item["start"])
+            for n in range((date.fromisoformat(item["end"]) - start).days):
+                key = (item["room_id"], (start + timedelta(days=n)).isoformat())
+                rooms[key] = rooms.get(key, 0) + item["quantity"]
+    return seats, rooms
+
+
+def _public(stored) -> dict[str, Any]:
+    """The package as the API shows it: id and version come from the row, not the stored JSON."""
+    return {**stored.package, "trip_id": stored.package_id, "version": stored.version}
+
+
+class Store:
+    def __init__(self, path: Path) -> None:
+        self.db = Database(path)
+        self.db.migrate()
+        self.packages = PackageRepo(self.db)
+
+    # ----- packages
+    def save_package(self, package: dict[str, Any], key: str | None = None, request: Any = None) -> str:
+        """Store a new package. With a key, a retry returns the package saved the first time."""
+        body = request if request is not None else {}
+
+        def create(conn):
+            return 200, {"package_id": self.packages.create(body, package, conn=conn).package_id}
+
+        if key is None:
+            with self.db.transaction() as conn:
+                return create(conn)[1]["package_id"]
+        return execute_once(self.db, scope="build", key=key, body=body, action=create).body["package_id"]
+
+    def get_package(self, pid: str) -> dict[str, Any] | None:
+        stored = self.packages.get(pid)
+        return _public(stored) if stored else None
+
+    def update_package(self, pid: str, package: dict[str, Any], expected_version: int) -> str:
+        """Optimistic update: 'ok', 'conflict' (stale version), 'booked' or 'missing'."""
+        current = self.packages.get(pid)
+        if current is None:
+            return "missing"
+        if current.status == "BOOKED":
+            return "booked"
+        try:
+            self.packages.update(pid, expected_version, package)
+        except VersionConflict:
+            return "conflict"
+        return "ok"
+
+    # ----- S2 inventory
+    def flight_holds(self) -> dict[str, int]:
+        with self.db.transaction() as c:
+            return {r["flight_id"]: r["seats"] for r in c.execute("SELECT flight_id, seats FROM flight_holds")}
+
+    def room_holds(self) -> dict[tuple[str, str], int]:
+        with self.db.transaction() as c:
+            return {(r["room_id"], r["night"]): r["rooms"] for r in c.execute("SELECT * FROM room_holds")}
+
+    # ----- reservations
+    def get_reservation(self, number: str) -> dict[str, Any] | None:
+        with self.db.transaction() as c:
+            row = c.execute("SELECT body_json FROM reservations WHERE number=?", (number,)).fetchone()
+        return json.loads(row["body_json"]) if row else None
+
+    def confirm(self, pid: str, key: str, check=None) -> tuple[dict[str, Any] | None, bool]:
+        """Returns (reservation, replayed); (None, False) for an unknown package.
+
+        Raises ``IdempotencyKeyReused`` (same key, other package) and ``SoldOut``.
+        """
+        if self.packages.get(pid) is None:
+            return None, False
+
+        def book(conn):
+            existing = conn.execute("SELECT body_json FROM reservations WHERE package_id=?", (pid,)).fetchone()
+            if existing:  # this package is already booked: hand back its reservation
+                return 200, json.loads(existing["body_json"])
+            package = self.packages.get(pid, conn=conn).package
+            held_seats = {r["flight_id"]: r["seats"] for r in conn.execute("SELECT flight_id, seats FROM flight_holds")}
+            held_rooms = {(r["room_id"], r["night"]): r["rooms"] for r in conn.execute("SELECT * FROM room_holds")}
+            if check is not None and (problem := check(package, held_seats, held_rooms)):
+                raise SoldOut(problem)  # the transaction rolls back: nothing is stored
+            seats, rooms = demand(package)
+            for flight_id, n in seats.items():
+                conn.execute(
+                    "INSERT INTO flight_holds VALUES (?, ?) ON CONFLICT(flight_id) DO UPDATE SET seats = seats + ?",
+                    (flight_id, n, n))
+            for (room_id, night), n in rooms.items():
+                conn.execute(
+                    "INSERT INTO room_holds VALUES (?, ?, ?) ON CONFLICT(room_id, night) DO UPDATE SET rooms = rooms + ?",
+                    (room_id, night, n, n))
+            number = generate_unique_number(
+                lambda n: conn.execute("SELECT 1 FROM reservations WHERE number=?", (n,)).fetchone() is not None)
+            booked = json.loads(json.dumps(package))
+            for item in booked["items"]:
+                item["status"], item["booking"] = "BOOKED", {"reference": number}
+            body = {"reservation_number": number, "package": {**booked, "trip_id": pid}}
+            self.packages.save_booked(pid, booked, conn)
+            conn.execute("INSERT INTO reservations VALUES (?, ?, ?, ?)",
+                         (number, pid, json.dumps(body), datetime.now(UTC).isoformat()))
+            return 200, body
+
+        result = execute_once(self.db, scope="confirm", key=key, body={"package_id": pid}, action=book)
+        return result.body, result.replayed

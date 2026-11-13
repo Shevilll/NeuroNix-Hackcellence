@@ -43,7 +43,7 @@ export default function App() {
   async function confirm(id: string) {
     setBusy(true);
     try {
-      const r = await confirmPackage(id, confirmKey);
+      const r = await confirmPackage(id, `${confirmKey}:${id}`);
       setReservation({ number: r.reservation_number, pkg: r.package });
     } catch (error) {
       setServerError(messageFrom(error));

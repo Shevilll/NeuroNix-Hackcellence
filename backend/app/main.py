@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import check, images, options, packages, quick
 from app.catalog.loader import load_catalog
 from app.config import Settings, load_settings
-from app.store.mvp_store import Store
+from app.store.store import Store
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

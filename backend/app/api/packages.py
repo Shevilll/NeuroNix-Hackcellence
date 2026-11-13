@@ -7,7 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from app.changes.operations import ChangeRefused, apply_change, change_report, list_city_plans, list_options
 from app.domain.request import RequestInvalid, parse_request
 from app.rules.validate import validate_package
-from app.store.mvp_store import SoldOut
+from app.store.store import IdempotencyKeyReused, SoldOut
 from app.planner.builder import build_package
 
 router = APIRouter()
@@ -35,15 +35,23 @@ def build(payload: dict, request: Request, idempotency_key: str | None = Header(
         ) from error
     result = build_package(trip, catalog)
     if result["status"] == "OK":
-        pid = store.save_package(result["package"], idempotency_key)
+        pid = _save(store, result["package"], idempotency_key, payload)
         result["package"] = store.get_package(pid)
         result["package_id"] = pid
         saved = {}
         for name, alt in result.pop("alternatives").items():
-            alt_id = store.save_package(alt, f"{idempotency_key}:{name}" if idempotency_key else None)
+            alt_id = _save(store, alt, f"{idempotency_key}:{name}" if idempotency_key else None, {**payload, "package": name})
             saved[name] = {"package_id": alt_id, "package": store.get_package(alt_id)}
         result["alternatives"] = saved
     return result
+
+
+def _save(store, package: dict, key: str | None, payload: dict) -> str:
+    try:
+        return store.save_package(package, key, payload)
+    except IdempotencyKeyReused as error:
+        raise HTTPException(422, detail={"code": "IDEMPOTENCY_KEY_REUSED",
+                                         "message": "That Idempotency-Key was already used for a different request."}) from error
 
 
 def _package(request: Request, pid: str) -> dict:
@@ -82,6 +90,9 @@ def confirm(pid: str, request: Request, response: Response,
 
     try:
         body, replayed = request.app.state.store.confirm(pid, idempotency_key, check)
+    except IdempotencyKeyReused as error:
+        raise HTTPException(422, detail={"code": "IDEMPOTENCY_KEY_REUSED",
+                                         "message": "That Idempotency-Key was already used for a different request."}) from error
     except SoldOut as gone:
         raise HTTPException(409, detail={"code": "SOLD_OUT", "message": f"Sorry, the last seats or rooms were just booked: {gone}"}) from gone
     if body is None:

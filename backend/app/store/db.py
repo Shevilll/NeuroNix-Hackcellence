@@ -41,6 +41,25 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     created_at    TEXT NOT NULL,
     PRIMARY KEY (scope, key)
 );
+
+CREATE TABLE IF NOT EXISTS reservations (
+    number       TEXT PRIMARY KEY,
+    package_id   TEXT NOT NULL UNIQUE REFERENCES packages(package_id),
+    body_json    TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS flight_holds (
+    flight_id TEXT PRIMARY KEY,
+    seats     INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS room_holds (
+    room_id TEXT NOT NULL,
+    night   TEXT NOT NULL,
+    rooms   INTEGER NOT NULL,
+    PRIMARY KEY (room_id, night)
+);
 """
 
 
