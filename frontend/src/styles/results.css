@@ -135,3 +135,11 @@
   .day li { grid-template-columns: 24px 56px 1fr; }
   .day li .price { grid-column: 3; }
 }
+
+.quick__label { display: block; font-weight: 600; margin-bottom: 10px; }
+.quick__row { display: flex; flex-wrap: wrap; gap: 12px; }
+.quick__row input {
+  flex: 1 1 320px; height: 44px; padding: 0 12px; font: inherit;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+}
+.quick__note { margin: 10px 0 0; color: var(--text-muted); }

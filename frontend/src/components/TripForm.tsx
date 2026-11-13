@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { TripOptions, TripRequest } from "../api/types";
 import {
   formatLongDate,
@@ -35,16 +35,37 @@ interface Props {
   onSubmit: (request: TripRequest) => void;
   busy?: boolean;
   serverError?: string | null;
+  /** Fields read from a quick request. A new object replaces what the form shows for those fields. */
+  prefill?: Partial<TripRequest> | null;
 }
 
 type ErrorKey = keyof FormErrors;
 
-export default function TripForm({ options, onSubmit, busy = false, serverError }: Props) {
+export default function TripForm({ options, onSubmit, busy = false, serverError, prefill }: Props) {
   const [values, setValues] = useState<FormValues>(EMPTY);
   const [childCount, setChildCount] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
 
   const { rules } = options;
+
+  useEffect(() => {
+    if (!prefill) return;
+    const country = options.countries.find((c) => c.name === prefill.country || c.code === prefill.country);
+    const ages = prefill.children_ages;
+    setValues((v) => ({
+      ...v,
+      ...(prefill.origin ? { origin: prefill.origin } : {}),
+      ...(country ? { country: country.code } : {}),
+      ...(prefill.start_date ? { startDate: prefill.start_date } : {}),
+      ...(prefill.nights !== undefined ? { nights: String(prefill.nights) } : {}),
+      ...(prefill.adults !== undefined ? { adults: String(prefill.adults) } : {}),
+      ...(ages ? { childAges: ages.map(String) } : {}),
+      ...(prefill.budget !== undefined ? { budget: Number(prefill.budget).toLocaleString("en-IN") } : {}),
+    }));
+    if (ages) setChildCount(ages.length ? String(ages.length) : "");
+    setErrors({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill]);
 
   function update(patch: Partial<FormValues>, clear: ErrorKey) {
     setValues((v) => ({ ...v, ...patch }));

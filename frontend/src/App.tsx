@@ -3,6 +3,7 @@ import { ApiError } from "./api/client";
 import { build, confirmPackage, getOptions, getReservation, type BuildResult, type TripPackage } from "./api/endpoints";
 import { newIdempotencyKey } from "./api/client";
 import ChangePanel from "./components/ChangePanel";
+import QuickRequest from "./components/QuickRequest";
 import PackageView from "./components/PackageView";
 import type { TripOptions, TripRequest } from "./api/types";
 import Logo from "./components/Logo";
@@ -29,6 +30,7 @@ export default function App() {
   const [budget, setBudget] = useState(0);
   const [reservation, setReservation] = useState<{ number: string; pkg: TripPackage } | null>(null);
   const [pick, setPick] = useState<string>("recommended");
+  const [prefill, setPrefill] = useState<Partial<TripRequest> | null>(null);
   const [lookup, setLookup] = useState("");
   const [notFound, setNotFound] = useState(false);
   const [confirmKey] = useState(newIdempotencyKey);
@@ -115,7 +117,8 @@ export default function App() {
           </div>
         ) : (
           <>
-            <TripForm options={options} onSubmit={submit} busy={busy} serverError={serverError} />
+            <QuickRequest onParsed={(r) => setPrefill({ ...r.fields })} />
+            <TripForm prefill={prefill} options={options} onSubmit={submit} busy={busy} serverError={serverError} />
             {result?.status === "NO_PACKAGE" && (
               <div className="card notice" role="alert">
                 <p className="notice__title">No package is possible</p>

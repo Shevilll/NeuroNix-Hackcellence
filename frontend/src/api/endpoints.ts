@@ -103,3 +103,13 @@ export async function changePackage(id: string, change: Record<string, unknown>)
     })
   ).data;
 }
+
+export interface QuickResult {
+  fields: Partial<TripRequest>;
+  missing: string[];
+  unclear: string[];
+}
+
+export async function quickRequest(text: string) {
+  return (await api.request<QuickResult>("/api/quick-request", { method: "POST", body: { text } })).data;
+}
