@@ -125,3 +125,13 @@ export interface CityPlan {
 export async function getCityPlans(id: string) {
   return (await api.request<CityPlan[]>(`/api/packages/${id}/city-plans`)).data;
 }
+
+export interface CheckReport {
+  valid: boolean;
+  violations: { code: string; message: string; group: string }[];
+  checklist: { group: string; ok: boolean }[];
+}
+
+export async function checkTrip(trip: unknown) {
+  return (await api.request<CheckReport>("/api/check", { method: "POST", body: trip })).data;
+}

@@ -1,4 +1,6 @@
-import type { TripItem, TripPackage } from "../api/endpoints";
+import { useEffect, useState } from "react";
+import { checkTrip, type CheckReport, type TripItem, type TripPackage } from "../api/endpoints";
+import RuleChecklist from "./RuleChecklist";
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const ICON: Record<TripItem["type"], string> = { flight: "✈️", hotel: "🏨", transfer: "🚕", attraction: "🎟️" };
@@ -11,6 +13,13 @@ function timeOf(item: TripItem) {
 }
 
 export default function PackageView({ pkg, budget }: { pkg: TripPackage; budget: number }) {
+  const [report, setReport] = useState<CheckReport | null>(null);
+  useEffect(() => {
+    let live = true;
+    setReport(null);
+    checkTrip(pkg).then((r) => live && setReport(r), () => live && setReport(null));
+    return () => { live = false; };
+  }, [pkg]);
   const days = new Map<string, TripItem[]>();
   for (const item of [...pkg.items].sort((a, b) => a.start.localeCompare(b.start))) {
     const key = dayOf(item);
@@ -35,6 +44,7 @@ export default function PackageView({ pkg, budget }: { pkg: TripPackage; budget:
           </a>
         )}
       </div>
+      {report && <RuleChecklist report={report} />}
       {[...days.entries()].map(([day, items]) => (
         <div key={day} className="day">
           <h3>{new Date(day).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}</h3>

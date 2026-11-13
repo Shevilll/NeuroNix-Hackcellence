@@ -4,6 +4,7 @@ import { build, confirmPackage, getOptions, getReservation, type BuildResult, ty
 import { newIdempotencyKey } from "./api/client";
 import ChangePanel from "./components/ChangePanel";
 import QuickRequest from "./components/QuickRequest";
+import CheckerPanel from "./components/CheckerPanel";
 import PackageView from "./components/PackageView";
 import type { TripOptions, TripRequest } from "./api/types";
 import Logo from "./components/Logo";
@@ -181,6 +182,7 @@ export default function App() {
                 <PackageView pkg={reservation.pkg} budget={reservation.pkg.budget_inr} />
               </>
             )}
+            <CheckerPanel />
             <form className="card lookup" onSubmit={(e) => { e.preventDefault(); open(lookup.trim()); }}>
               <label>Have a reservation number? <input value={lookup} onChange={(e) => setLookup(e.target.value)} inputMode="numeric" maxLength={10} /></label>
               <button type="submit" className="btn">Open</button>
