@@ -115,7 +115,7 @@ Status legend: **Done** · **Partly** · **Planned**
 |---|---|---|---|
 | S1 | Quick request | Plain-words request parsed with rules and regular expressions (no AI) to fill the form | Done |
 | S2 | Booking uses up seats and rooms | Confirmed bookings hold seats and room-nights in our own store; a booking needing the same last seats/rooms is refused | Done |
-| S3 | Our own ideas | Budget-fix suggestions with re-solved totals (done). A checker page that validates any exported trip JSON, a live rule checklist and a photo gallery are not built yet. | Partly |
+| S3 | Our own ideas | Live rule checklist on every package, a checker page that validates any exported trip JSON against every rule, and budget-fix suggestions with re-solved totals. The photo gallery is not built. | Done |
 
 ---
 
@@ -156,8 +156,8 @@ flowchart TB
 - **The backend holds all logic.** City choice, package building, rule checks, and prices run in the
   backend. The frontend only renders what the API returns.
 - **One validator, used everywhere.** The builder generates candidates and only keeps the ones the
-  validator passes with zero violations. The same validator re-checks every change and runs again on
-  confirm.
+  validator passes with zero violations. The same validator re-checks every change, runs again on
+  confirm, drives the rule checklist shown on every package, and backs the checker page (`POST /api/check`).
 - **Catalog is read-only.** All flights, hotels, rooms, transfers, attractions, prices, and opening times
   come from `data/catalog/`. Our own state (packages, reservations, inventory holds) lives in SQLite.
 - **Deterministic.** The same request on the same data always gives the same package, which makes the
@@ -298,6 +298,7 @@ Base URL: `http://localhost:8000/api`
 | `POST` | `/packages/{id}/confirm` | Book it. Needs an `Idempotency-Key` header. `409 SOLD_OUT` when the last seats or rooms are gone |
 | `GET` | `/reservations/{number}` | Reservation summary, or `404 {"detail": "not found"}` |
 | `POST` | `/quick-request` | Parse plain text into form fields (rules, no AI) |
+| `POST` | `/check` | Validate any trip JSON against every rule: `valid`, `violations` (with code and group) and a per-group `checklist` |
 
 Example request body for `POST /packages`:
 
@@ -408,7 +409,7 @@ NeuroNix-Hackcellence/
 - No login and no payment: "confirm" saves the reservation in the app's own database.
 - The first package has one attraction per full day (the rules allow one or two); the traveler can add more.
 - "Best rated" picks the top-star hotel in each city and skips city plans where that exceeds the budget; it does not mix tiers to squeeze under the budget.
-- Not built yet: the checker page for loading any trip JSON, a live rule checklist in the UI, and the photo gallery.
+- Not built yet: the photo gallery (photos and credits are in `images/` but not shown in the app).
 - This section will be updated with anything unfinished at code freeze.
 
 ---
