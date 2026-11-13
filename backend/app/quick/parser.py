@@ -7,7 +7,7 @@ find is reported in ``missing`` so the traveler fills it in; the form still vali
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from app.catalog.loader import Catalog
@@ -203,6 +203,10 @@ def parse_quick_request(text: str, catalog: Catalog) -> dict[str, Any]:
     if budget is not None:
         fields["budget"] = budget
     start, rest = _date(rest, year)
+    rules = catalog.rules
+    if start and not (rules.first_night <= date.fromisoformat(start)
+                      and date.fromisoformat(start) + timedelta(days=rules.min_nights) <= rules.last_departure):
+        start = None  # outside the data window: leave it for the traveler to choose
     if start:
         fields["start_date"] = start
     nights, rest = _nights(rest)

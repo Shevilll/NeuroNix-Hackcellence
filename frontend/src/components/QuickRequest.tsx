@@ -232,6 +232,8 @@ export default function QuickRequest({ onParsed }: { onParsed: (r: QuickResult) 
         <div className="quick__field">
           <input
             id="quick-text"
+            name="trip-description"
+            autoComplete="off"
             value={listening ? "" : text}
             maxLength={500}
             readOnly={listening}
