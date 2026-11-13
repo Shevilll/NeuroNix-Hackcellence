@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 
 from app.catalog.loader import load_catalog
-from app.changes.operations import ChangeRefused, apply_change, change_report
+from app.changes.operations import ChangeRefused, apply_change, change_report, list_options
 from app.config import load_settings
 from app.domain.request import TripRequest
 from app.planner.builder import build_package, hotel_options
@@ -53,11 +53,65 @@ def test_a_freshly_built_package_still_needs_an_attraction_every_day(catalog, me
     assert codes == {"ATTRACTION_COUNT"}
 
 
-def test_the_cap_of_two_attractions_a_day_still_applies_after_a_change(catalog, menon):
-    one = apply_change(menon, catalog, {"op": "add_attraction", "attraction_id": "ATT-TYO-011", "date": "2027-04-11"})
-    reason = refusal(one, catalog, {"op": "add_attraction", "attraction_id": "ATT-TYO-015", "date": "2027-04-11"})
-    assert {v["code"] for v in reason.violations} == {"ATTRACTION_COUNT"}
-    assert "at most 2" in reason.reason
+def add(package, catalog, attraction_id, day="2027-04-11"):
+    return apply_change(package, catalog, {"op": "add_attraction", "attraction_id": attraction_id, "date": day})
+
+
+def visits_on(package, day="2027-04-11"):
+    return sorted((i["start"][11:16], i["end"][11:16], i["catalog_id"])
+                  for i in package["items"] if i["type"] == "attraction" and i["start"][:10] == day)
+
+
+def test_the_traveller_can_add_a_third_and_fourth_attraction_to_a_day(catalog, menon):
+    # The problem statement limits only the first package to 1-2 a day; the traveller may add more.
+    updated = add(add(add(menon, catalog, "ATT-TYO-011"), catalog, "ATT-TYO-015"), catalog, "ATT-TYO-012")
+    assert len(visits_on(updated)) == 4
+    assert validate_package(updated, catalog, require_daily_attractions=False) == []
+
+
+def test_the_first_package_rule_still_flags_more_than_two_on_a_full_day(catalog, menon):
+    updated = add(add(menon, catalog, "ATT-TYO-011"), catalog, "ATT-TYO-015")
+    assert {v["code"] for v in validate_package(updated, catalog)} == {"ATTRACTION_COUNT"}
+
+
+@pytest.fixture(scope="module")
+def evening(catalog, menon):
+    """11 Apr filled to 20:25, with travel time between visits: Senso-ji 09:00-10:00, Odaiba
+    Seaside Park 10:45-11:45, Tokyo Disneyland 12:25-20:25."""
+    day = menon
+    for attraction_id in ("ATT-TYO-015", "ATT-TYO-002"):
+        day = add(day, catalog, attraction_id)
+    assert visits_on(day)[-1] == ("12:25", "20:25", "ATT-TYO-002")
+    return day
+
+
+def test_an_added_visit_must_end_by_22_00_even_when_the_attraction_is_open_later(catalog, evening):
+    # ATT-TYO-012 is open until 23:00, but after 50 min of travel a 60-minute visit would end at 22:15.
+    reason = refusal(evening, catalog, {"op": "add_attraction", "attraction_id": "ATT-TYO-012", "date": "2027-04-11"})
+    assert "22:00" in reason.reason
+
+
+def test_an_added_visit_may_end_exactly_at_22_00(catalog, evening):
+    updated = add(evening, catalog, "ATT-TYO-011")  # 30 minutes, open all day, 65 min from Disneyland
+    assert visits_on(updated)[-1] == ("21:30", "22:00", "ATT-TYO-011")
+    assert validate_package(updated, catalog, require_daily_attractions=False) == []
+
+
+def test_an_added_visit_must_still_fit_the_attractions_own_hours(catalog, evening):
+    # ATT-TYO-009 closes at 20:00, so it cannot start at 21:20 although 22:00 has not come.
+    refusal(evening, catalog, {"op": "add_attraction", "attraction_id": "ATT-TYO-009", "date": "2027-04-11"})
+
+
+def test_options_offer_more_attractions_on_a_day_that_already_has_two(catalog, menon):
+    two = add(menon, catalog, "ATT-TYO-011")
+    offered = {o["attraction_id"] for o in list_options(two, catalog, "attractions") if o["date"] == "2027-04-11"}
+    assert "ATT-TYO-015" in offered
+
+
+def test_options_never_offer_a_visit_that_would_end_after_22_00(catalog, evening):
+    offered = {o["attraction_id"] for o in list_options(evening, catalog, "attractions") if o["date"] == "2027-04-11"}
+    assert "ATT-TYO-011" in offered
+    assert "ATT-TYO-012" not in offered
 
 
 # ------------------------------------------------ 2. report: price difference and warnings

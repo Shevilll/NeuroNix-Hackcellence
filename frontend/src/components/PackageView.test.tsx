@@ -18,8 +18,10 @@ describe("PackageView (M4: day-by-day plan in time order)", () => {
     const day10 = screen.getByRole("region", { name: /Sat 10 Apr/ });
     const names = within(day10).getAllByRole("listitem").map((li) => li.textContent);
     expect(names[0]).toMatch(/Narita limousine bus/);
-    expect(names[0]).toMatch(/11:30/);
-    expect(names[0]).toMatch(/13:10/);
+    // The bus runs 11:30-13:10 in Japan, shown in India time (IST, 3 h 30 min behind).
+    expect(names[0]).toMatch(/08:00/);
+    expect(names[0]).toMatch(/09:40/);
+    expect(names[0]).not.toMatch(/11:30|13:10/);
     expect(names[1]).toMatch(/Ginza Pearl Hotel/);
     expect(names[1]).toMatch(/2 nights/);
   });
@@ -53,6 +55,17 @@ describe("PackageView changes (M6, G1)", () => {
     // Add an attraction: every day with a hotel night (10..13 Apr), not the departure day or the flight-out evening.
     expect(screen.getAllByRole("button", { name: /add an attraction/i })).toHaveLength(4);
     expect(within(screen.getByRole("region", { name: /Wed 14 Apr/ })).queryByRole("button", { name: /add an attraction/i })).toBeNull();
+  });
+
+  it("still offers to add an attraction on a day that already has two visits", () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi()));
+    const base = makePackage();
+    const extra = { ...base.items[3], item_id: "i10", name: "Shibuya Crossing", catalog_id: "ATT-TYO-011",
+      start: "2027-04-11T10:00", end: "2027-04-11T10:30" };
+    render(<PackageView pkg={makePackage({ items: [...base.items, extra] })} budget={350000} edit={{ id: "pkg_test1", onChanged: () => {} }} />);
+    const day = screen.getByRole("region", { name: /Sun 11 Apr/ });
+    expect(within(day).getAllByRole("button", { name: /^remove/i })).toHaveLength(2);
+    expect(within(day).getByRole("button", { name: /add an attraction/i })).toBeInTheDocument();
   });
 
   it("removes an attraction, then shows the price difference and the warnings the backend sent", async () => {

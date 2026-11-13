@@ -73,4 +73,14 @@ describe("ChangeOptions (G2: every option shows its price difference)", () => {
     render(<ChangeOptions id="pkg_test1" pkg={makePackage()} kind="flights" params={{ role: "return_flight" }} title="Change your return flight" onChanged={() => {}} onClose={() => {}} />);
     expect(await screen.findByText(/no other valid/i)).toBeInTheDocument();
   });
+
+  it("shows flight times in India time (IST): a flight home leaves in Japan time and lands in India", async () => {
+    vi.stubGlobal("fetch", vi.fn(stubApi((url) => (url.startsWith("/api/packages/pkg_test1/options/flights") ? reply(200, [
+      { flight_id: "FL-499", name: "AirVeda AV 499 KIX to BLR", depart: "2027-04-14T12:00", arrive: "2027-04-14T18:00", price_diff: 0 },
+    ]) : undefined))));
+    render(<ChangeOptions id="pkg_test1" pkg={makePackage({ country: "Japan" })} kind="flights" params={{ role: "return_flight" }} title="Change your return flight" onChanged={() => {}} onClose={() => {}} />);
+    // Leaves Osaka 12:00 JST = 08:30 IST; lands in Bengaluru 18:00, already IST.
+    expect(await screen.findByText(/departs.*08:30/i)).toBeInTheDocument();
+    expect(screen.getByText(/lands.*18:00/i)).toBeInTheDocument();
+  });
 });

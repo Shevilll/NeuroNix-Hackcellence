@@ -76,3 +76,36 @@ def test_check_endpoint(tmp_path, menon):
     broken["total_inr"] += 5000
     bad = client.post("/api/check", json=broken).json()
     assert bad["valid"] is False and not groups(bad)["Prices"]
+
+
+# ------------------------------------------------ the 1-2 a day rule is for the first package only
+
+
+def with_two_more_visits(catalog, menon):
+    """The Menon package after the traveller added two visits to 11 Apr (three that day)."""
+    from app.changes.operations import apply_change
+
+    out = menon
+    for attraction_id in ("ATT-TYO-011", "ATT-TYO-015"):
+        out = apply_change(out, catalog, {"op": "add_attraction", "attraction_id": attraction_id, "date": "2027-04-11"})
+    return out
+
+
+def test_a_package_the_traveller_changed_may_have_more_than_two_visits_a_day(catalog, menon):
+    changed = {**with_two_more_visits(catalog, menon), "version": 3}
+    report = check_trip(changed, catalog)
+    assert report["valid"], report["violations"]
+    assert all(groups(report).values())
+
+
+@pytest.mark.parametrize("version", [1, None, "3", True, 2.5, [2]])
+def test_a_first_package_with_more_than_two_visits_a_day_still_fails(catalog, menon, version):
+    first = {**with_two_more_visits(catalog, menon), "version": version}
+    report = check_trip(first, catalog)
+    assert [v["code"] for v in report["violations"]] == ["ATTRACTION_COUNT"]
+    assert groups(report)["Attractions"] is False
+
+
+def test_a_file_without_a_version_is_checked_as_a_first_package(catalog, menon):
+    bare = {k: v for k, v in with_two_more_visits(catalog, menon).items() if k != "version"}
+    assert [v["code"] for v in check_trip(bare, catalog)["violations"]] == ["ATTRACTION_COUNT"]
