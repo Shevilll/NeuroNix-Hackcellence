@@ -115,7 +115,7 @@ Status legend: **Done** · **Partly** · **Planned**
 |---|---|---|---|
 | S1 | Quick request | Plain-words request parsed with rules and regular expressions (no AI) to fill the form | Done |
 | S2 | Booking uses up seats and rooms | Confirmed bookings hold seats and room-nights in our own store; a booking needing the same last seats/rooms is refused | Done |
-| S3 | Our own ideas | Live rule checklist on every package, a checker page that validates any exported trip JSON against every rule, and budget-fix suggestions with re-solved totals. The photo gallery is not built. | Done |
+| S3 | Our own ideas | Live rule checklist on every package, a checker page that validates any exported trip JSON against every rule, and budget-fix suggestions with re-solved totals. Photos of hotels and attractions on the package timeline, with a Photo credits panel. | Done |
 
 ---
 
@@ -298,6 +298,7 @@ Base URL: `http://localhost:8000/api`
 | `POST` | `/packages/{id}/confirm` | Book it. Needs an `Idempotency-Key` header. `409 SOLD_OUT` when the last seats or rooms are gone |
 | `GET` | `/reservations/{number}` | Reservation summary, or `404 {"detail": "not found"}` |
 | `POST` | `/quick-request` | Parse plain text into form fields (rules, no AI) |
+| `GET` | `/images`, `/credits` | Photo URL per hotel/attraction id, and the parsed photo credits (photos are served under `/images/…`) |
 | `POST` | `/check` | Validate any trip JSON against every rule: `valid`, `violations` (with code and group) and a per-group `checklist` |
 
 Example request body for `POST /packages`:
@@ -409,7 +410,7 @@ NeuroNix-Hackcellence/
 - No login and no payment: "confirm" saves the reservation in the app's own database.
 - The first package has one attraction per full day (the rules allow one or two); the traveler can add more.
 - "Best rated" picks the top-star hotel in each city and skips city plans where that exceeds the budget; it does not mix tiers to squeeze under the budget.
-- Not built yet: the photo gallery (photos and credits are in `images/` but not shown in the app).
+- Hotel photos are generic room photos shared by several hotels, because the hotels in the data are fictional.
 - This section will be updated with anything unfinished at code freeze.
 
 ---
@@ -419,4 +420,4 @@ NeuroNix-Hackcellence/
 - All catalog data is synthetic and supplied by the organisers. It is read-only and used unchanged.
 - All prices are in INR (whole rupees). All times are local to the place.
 - Photos are real, freely licensed images from Wikimedia Commons. Credits are in
-  [`images/ATTRIBUTIONS.md`](images/ATTRIBUTIONS.md) and are included for when photos are shown.
+  [`images/ATTRIBUTIONS.md`](images/ATTRIBUTIONS.md) and are shown in the app in the Photo credits panel.
