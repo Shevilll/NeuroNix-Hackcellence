@@ -5,6 +5,7 @@ import { newIdempotencyKey } from "./api/client";
 import ChangePanel from "./components/ChangePanel";
 import QuickRequest from "./components/QuickRequest";
 import CheckerPanel from "./components/CheckerPanel";
+import PhotoCredits from "./components/PhotoCredits";
 import PackageView from "./components/PackageView";
 import type { TripOptions, TripRequest } from "./api/types";
 import Logo from "./components/Logo";
@@ -191,6 +192,7 @@ export default function App() {
           </>
         )}
       </main>
+      <div className="app-main app-main--footer"><PhotoCredits /></div>
     </>
   );
 }

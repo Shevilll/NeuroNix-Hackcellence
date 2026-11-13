@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { checkTrip, type CheckReport, type TripItem, type TripPackage } from "../api/endpoints";
 import RuleChecklist from "./RuleChecklist";
+import { usePhotos } from "./usePhotos";
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 const ICON: Record<TripItem["type"], string> = { flight: "✈️", hotel: "🏨", transfer: "🚕", attraction: "🎟️" };
@@ -14,6 +15,7 @@ function timeOf(item: TripItem) {
 
 export default function PackageView({ pkg, budget }: { pkg: TripPackage; budget: number }) {
   const [report, setReport] = useState<CheckReport | null>(null);
+  const photos = usePhotos();
   useEffect(() => {
     let live = true;
     setReport(null);
@@ -50,8 +52,12 @@ export default function PackageView({ pkg, budget }: { pkg: TripPackage; budget:
           <h3>{new Date(day).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}</h3>
           <ul>
             {items.map((i) => (
-              <li key={i.item_id}>
-                <span aria-hidden="true">{ICON[i.type]}</span>
+              <li key={i.item_id} className={photos[i.catalog_id ?? ""] ? "has-photo" : undefined}>
+                {photos[i.catalog_id ?? ""] ? (
+                  <img className="thumb" src={photos[i.catalog_id ?? ""]} alt={i.name} loading="lazy" />
+                ) : (
+                  <span aria-hidden="true">{ICON[i.type]}</span>
+                )}
                 <b>{timeOf(i)}</b>
                 <span className="name">
                   {i.name} <span>({i.city})</span>

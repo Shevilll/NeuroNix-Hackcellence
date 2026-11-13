@@ -150,3 +150,10 @@
 .checklist li { padding: 4px 12px; border-radius: 999px; font-weight: 600; font-size: 0.875rem; }
 .checklist .violations { flex-direction: column; margin-top: 12px; }
 .checklist .violations li { background: none; color: var(--text); font-weight: 400; border-radius: 0; padding: 0; }
+
+.day li.has-photo { grid-template-columns: 56px 56px 1fr auto; align-items: center; }
+.thumb { width: 56px; height: 40px; object-fit: cover; border-radius: 6px; background: var(--blue-50); }
+.credits__list { margin: 12px 0 0; padding-left: 20px; font-size: 0.875rem; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 560px) { .day li.has-photo { grid-template-columns: 56px 1fr; } }
+
+.app-main.app-main--footer { margin-top: 0; padding-top: 0; }
