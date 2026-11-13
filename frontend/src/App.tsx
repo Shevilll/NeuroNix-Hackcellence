@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "./api/client";
 import { buildPackage, getOptions } from "./api/endpoints";
 import type { TripOptions, TripRequest } from "./api/types";
+import Logo from "./components/Logo";
+import Spinner from "./components/Spinner";
 import TripForm from "./components/TripForm";
 
 function messageFrom(error: unknown): string {
@@ -46,24 +48,46 @@ export default function App() {
     <>
       <header className="app-header">
         <div className="app-header__inner">
+          <Logo />
           <span className="app-header__name">Build My Holiday</span>
-          <span className="app-header__tag">Flights, hotels, transfers and attractions in one plan</span>
+        </div>
+        <div className="hero">
+          <h1 className="hero__title">Where to next?</h1>
+          <p className="hero__sub">
+            One plan with flights, hotels, transfers and things to do. Every part checked to fit together and fit
+            your budget.
+          </p>
         </div>
       </header>
       <main className="app-main">
         {loadFailed ? (
-          <div className="card" role="alert">
-            <p>We could not load the trip options. Check that the backend is running.</p>
+          <div className="card notice" role="alert">
+            <p className="notice__title">We could not load the trip options</p>
+            <p className="notice__text">Check that the backend is running, then try again.</p>
             <button type="button" className="btn btn--primary" onClick={load}>
               Try again
             </button>
           </div>
         ) : !options ? (
-          <p>Loading…</p>
+          <div className="card skeleton">
+            <Spinner label="Loading trip options…" showLabel />
+            <div className="skeleton__grid" aria-hidden="true">
+              {Array.from({ length: 6 }, (_, i) => (
+                <div key={i} className="skeleton__field">
+                  <span className="skeleton__bar skeleton__bar--label" />
+                  <span className="skeleton__bar" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
           <>
             <TripForm options={options} onSubmit={submit} busy={busy} serverError={serverError} />
-            {submitted && <p>Package request submitted.</p>}
+            {submitted && (
+              <p className="submitted" role="status">
+                Package request submitted.
+              </p>
+            )}
           </>
         )}
       </main>

@@ -81,3 +81,27 @@ describe("App submit", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Nights out of range");
   });
 });
+
+describe("App loading indicators", () => {
+  it("announces loading with a status region while options load", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    render(<App />);
+    expect(screen.getByRole("status")).toHaveTextContent(/loading trip options/i);
+  });
+
+  it("shows a spinner inside the submit button while building", async () => {
+    let finish: (r: Response) => void = () => {};
+    const fetchMock = vi.fn((url: string) =>
+      url === "/api/options" ? Promise.resolve(reply(200, options)) : new Promise<Response>((r) => (finish = r)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /load menon example/i }));
+    await user.click(screen.getByRole("button", { name: /build my holiday/i }));
+    const button = await screen.findByRole("button", { name: /building your package/i });
+    expect(button.querySelector("svg.spinner")).toBeInTheDocument();
+    expect(button).toBeDisabled();
+    finish(reply(200, { status: "OK" }));
+  });
+});

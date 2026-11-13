@@ -1,11 +1,13 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import type { TripOptions, TripRequest } from "../api/types";
 import {
+  formatLongDate,
   toRequest,
   validateForm,
   type FormErrors,
   type FormValues,
 } from "../domain/requestValidation";
+import Spinner from "./Spinner";
 import "./TripForm.css";
 
 const EMPTY: FormValues = {
@@ -80,7 +82,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError 
   return (
     <form className="card trip-form" onSubmit={submit} noValidate>
       <div className="trip-form__head">
-        <h1>Plan your holiday</h1>
+        <h2>Tell us about your trip</h2>
         <button type="button" className="btn btn--secondary" onClick={loadExample}>
           Load Menon example
         </button>
@@ -92,7 +94,9 @@ export default function TripForm({ options, onSubmit, busy = false, serverError 
         </p>
       )}
 
-      <div className="trip-form__grid">
+      <fieldset className="trip-form__group">
+        <legend>Where and when</legend>
+        <div className="trip-form__grid trip-form__grid--two">
         <Field id="origin" label="Departure city" error={errors.origin}>
           <select
             id="origin"
@@ -125,17 +129,19 @@ export default function TripForm({ options, onSubmit, busy = false, serverError 
           </select>
         </Field>
 
-        <Field id="startDate" label="Start date" error={errors.startDate}>
+        <Field id="startDate" label="Start date" error={errors.startDate} hint={`Flights and rooms run ${formatLongDate(rules.data_window.first_night)} to ${formatLongDate(rules.data_window.last_departure)}.`}>
           <input
             id="startDate"
             type="date"
+            min={rules.data_window.first_night}
+            max={rules.data_window.last_departure}
             value={values.startDate}
             onChange={(e) => update({ startDate: e.target.value }, "startDate")}
             {...field("startDate")}
           />
         </Field>
 
-        <Field id="nights" label="Nights" error={errors.nights}>
+        <Field id="nights" label="Nights" error={errors.nights} hint={`${rules.min_nights} to ${rules.max_nights} nights.`}>
           <input
             id="nights"
             type="number"
@@ -146,6 +152,12 @@ export default function TripForm({ options, onSubmit, busy = false, serverError 
           />
         </Field>
 
+        </div>
+      </fieldset>
+
+      <fieldset className="trip-form__group">
+        <legend>Who is travelling</legend>
+        <div className="trip-form__grid">
         <Field id="adults" label="Adults" error={errors.adults}>
           <input
             id="adults"
@@ -193,20 +205,31 @@ export default function TripForm({ options, onSubmit, busy = false, serverError 
           </Field>
         ))}
 
-        <Field id="budget" label="Budget (INR)" error={errors.budget} wide>
-          <input
-            id="budget"
-            type="text"
-            inputMode="numeric"
-            placeholder="e.g. 3,50,000"
-            value={values.budget}
-            onChange={(e) => update({ budget: e.target.value }, "budget")}
-            {...field("budget")}
-          />
+        </div>
+      </fieldset>
+
+      <fieldset className="trip-form__group">
+        <legend>Budget</legend>
+        <div className="trip-form__grid">
+        <Field id="budget" label="Budget for everything (INR)" error={errors.budget} hint="Flights, hotels, transfers and attractions all count.">
+          <div className="money">
+            <span className="money__sign" aria-hidden="true">₹</span>
+            <input
+              id="budget"
+              type="text"
+              inputMode="numeric"
+              placeholder="3,50,000"
+              value={values.budget}
+              onChange={(e) => update({ budget: e.target.value }, "budget")}
+              {...field("budget")}
+            />
+          </div>
         </Field>
-      </div>
+        </div>
+      </fieldset>
 
       <button type="submit" className="btn btn--primary trip-form__submit" disabled={busy}>
+        {busy && <Spinner decorative />}
         {busy ? "Building your package…" : "Build my holiday"}
       </button>
     </form>
@@ -218,6 +241,7 @@ function Field(props: {
   label: string;
   error?: string;
   errorId?: string;
+  hint?: string;
   wide?: boolean;
   children: ReactNode;
 }) {
@@ -225,6 +249,7 @@ function Field(props: {
     <div className={`field${props.wide ? " field--wide" : ""}${props.error ? " field--error" : ""}`}>
       <label htmlFor={props.id}>{props.label}</label>
       {props.children}
+      {props.hint && !props.error && <p className="field__hint">{props.hint}</p>}
       {props.error && (
         <p className="field__error" id={props.errorId ?? `${props.id}-error`}>
           {props.error}
