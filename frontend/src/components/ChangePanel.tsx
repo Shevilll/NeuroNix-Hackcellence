@@ -77,7 +77,7 @@ export default function ChangePanel({ id, pkg, onChanged }: { id: string; pkg: T
       )}
       {open && (
         <ul className="options">
-          {options.length === 0 && <li>No other valid options.</li>}
+          {options.length === 0 && !message && <li>No other valid options.</li>}
           {options.map((o, n) => (
             <li key={n}>
               {o.name}{o.date ? ` · ${o.date}` : ""} — {diff(o.price_diff)}{" "}
@@ -87,7 +87,7 @@ export default function ChangePanel({ id, pkg, onChanged }: { id: string; pkg: T
         </ul>
       )}
       <h4>Attractions</h4>
-      <ul>
+      <ul className="options options--plain">
         {removable.map((i) => (
           <li key={i.item_id}>
             {i.name} ({i.start.slice(0, 10)}){" "}

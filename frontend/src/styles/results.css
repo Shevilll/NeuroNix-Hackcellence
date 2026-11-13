@@ -73,7 +73,7 @@
 
 .day li {
   display: grid;
-  grid-template-columns: 28px 72px 1fr auto;
+  grid-template-columns: 56px 72px 1fr auto;
   align-items: baseline;
   gap: 8px;
 }
@@ -133,7 +133,7 @@
 }
 
 @media (max-width: 560px) {
-  .day li { grid-template-columns: 24px 72px 1fr; }
+  .day li { grid-template-columns: 56px 72px 1fr; }
   .day li .price { grid-column: 3; }
 }
 
@@ -155,8 +155,11 @@
 .day li.has-photo { grid-template-columns: 56px 72px 1fr auto; align-items: center; }
 .thumb { width: 56px; height: 40px; object-fit: cover; border-radius: 6px; background: var(--blue-50); }
 .credits__list { margin: 12px 0 0; padding-left: 20px; font-size: 0.875rem; display: flex; flex-direction: column; gap: 6px; }
-@media (max-width: 560px) { .day li.has-photo { grid-template-columns: 56px 1fr; } }
+@media (max-width: 560px) { .day li.has-photo { grid-template-columns: 56px 72px 1fr; } }
 
 .app-main.app-main--footer { margin-top: 0; padding-top: 0; }
 
 .options { max-height: 22rem; overflow-y: auto; }
+
+.day li > svg, .day li > span[aria-hidden="true"] { justify-self: center; }
+.options--plain { max-height: none; }
