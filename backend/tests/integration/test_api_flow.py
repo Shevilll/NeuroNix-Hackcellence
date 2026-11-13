@@ -108,3 +108,26 @@ def test_city_plans_can_be_listed_and_applied(settings):
     assert done.status_code == 200
     new = done.json()["package"]
     assert new["cities"] == other["cities"] and new["version"] == pkg["version"] + 1 and new["trip_id"] == pid
+
+
+def test_idempotency_key_cannot_be_reused_for_something_else(settings):
+    client = TestClient(create_app(settings))
+    a = client.post("/api/packages", json=MENON, headers={"Idempotency-Key": "build-1"}).json()
+    other = client.post("/api/packages", json={**MENON, "nights": 5}, headers={"Idempotency-Key": "build-1"})
+    assert other.status_code == 422 and other.json()["detail"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+    b = client.post("/api/packages", json={**MENON, "nights": 5}).json()
+    assert client.post(f"/api/packages/{a['package_id']}/confirm", headers={"Idempotency-Key": "c"}).status_code == 200
+    reuse = client.post(f"/api/packages/{b['package_id']}/confirm", headers={"Idempotency-Key": "c"})
+    assert reuse.status_code == 422 and reuse.json()["detail"]["code"] == "IDEMPOTENCY_KEY_REUSED"
+    assert client.get(f"/api/packages/{b['package_id']}").json()["items"][0]["status"] == "PLANNED"
+
+
+def test_booked_package_history_and_versions_survive_restart(settings):
+    client = TestClient(create_app(settings))
+    built = client.post("/api/packages", json=MENON).json()
+    pid = built["package_id"]
+    client.post(f"/api/packages/{pid}/confirm", headers={"Idempotency-Key": "z"})
+    again = TestClient(create_app(settings))
+    assert again.get(f"/api/packages/{pid}").json()["items"][0]["status"] == "BOOKED"
+    versions = again.app.state.store.packages.history(pid)
+    assert [v.version for v in versions] == [1]
