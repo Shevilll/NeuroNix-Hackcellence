@@ -120,6 +120,66 @@ class Store:
             row = c.execute("SELECT body_json FROM reservations WHERE number=?", (number,)).fetchone()
         return json.loads(row["body_json"]) if row else None
 
+    def list_reservations(self) -> list[dict[str, Any]]:
+        """Every reservation, newest first, as a short summary for the bookings list."""
+        with self.db.transaction() as c:
+            rows = c.execute("SELECT number, body_json, created_at FROM reservations ORDER BY created_at DESC, rowid DESC").fetchall()
+        out = []
+        for row in rows:
+            package = json.loads(row["body_json"])["package"]
+            traveler = package.get("traveler") or {}
+            out.append({
+                "reservation_number": row["number"],
+                "created_at": row["created_at"],
+                "country": package.get("country"),
+                "cities": package.get("cities", []),
+                "nights_per_city": package.get("nights_per_city", []),
+                "start_date": package.get("start_date"),
+                "end_date": package.get("end_date"),
+                "adults": traveler.get("adults"),
+                "children": len(traveler.get("child_ages") or []),
+                "total_inr": package.get("total_inr"),
+            })
+        return out
+
+    def delete_reservation(self, number: str) -> bool:
+        """Delete one booking. False when there is no such number."""
+        with self.db.transaction() as conn:
+            return self._delete_reservation(conn, number)
+
+    def delete_all_reservations(self) -> int:
+        """Delete every booking in one transaction. Returns how many were deleted."""
+        with self.db.transaction() as conn:
+            numbers = [r["number"] for r in conn.execute("SELECT number FROM reservations")]
+            for number in numbers:
+                self._delete_reservation(conn, number)
+            return len(numbers)
+
+    @staticmethod
+    def _delete_reservation(conn, number: str) -> bool:
+        """Give the seats and rooms back, then remove the reservation, its package, and the stored
+        answers of its build, change and confirm retries (so an old key cannot bring it back)."""
+        row = conn.execute("SELECT package_id, body_json FROM reservations WHERE number=?", (number,)).fetchone()
+        if row is None:
+            return False
+        pid = row["package_id"]
+        seats, rooms = demand(json.loads(row["body_json"])["package"])
+        for flight_id, n in seats.items():
+            conn.execute("UPDATE flight_holds SET seats = seats - ? WHERE flight_id=?", (n, flight_id))
+        for (room_id, night), n in rooms.items():
+            conn.execute("UPDATE room_holds SET rooms = rooms - ? WHERE room_id=? AND night=?", (n, room_id, night))
+        conn.execute("DELETE FROM flight_holds WHERE seats <= 0")
+        conn.execute("DELETE FROM room_holds WHERE rooms <= 0")
+        conn.execute("DELETE FROM reservations WHERE number=?", (number,))
+        conn.execute(
+            "DELETE FROM idempotency_keys WHERE (scope='confirm' AND json_extract(response_json, '$.reservation_number')=?)"
+            " OR (scope='build' AND json_extract(response_json, '$.package_id')=?) OR scope=?",
+            (number, pid, f"change:{pid}"),
+        )
+        conn.execute("DELETE FROM package_versions WHERE package_id=?", (pid,))
+        conn.execute("DELETE FROM packages WHERE package_id=?", (pid,))
+        return True
+
     def confirm(self, pid: str, key: str, check=None) -> tuple[dict[str, Any] | None, bool]:
         """Returns (reservation, replayed); (None, False) for an unknown package.
 

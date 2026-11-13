@@ -102,6 +102,26 @@ def confirm(pid: str, request: Request, response: Response,
     return body
 
 
+@router.get("/reservations")
+def reservations(request: Request) -> list:
+    """Every booking, newest first, with a short summary of its package."""
+    return request.app.state.store.list_reservations()
+
+
+@router.delete("/reservations")
+def delete_all_reservations(request: Request) -> dict:
+    """Delete every booking and give all seats and rooms back (resets the demo)."""
+    return {"deleted": request.app.state.store.delete_all_reservations()}
+
+
+@router.delete("/reservations/{number}", status_code=204)
+def delete_reservation(number: str, request: Request) -> Response:
+    """Delete one booking and give its seats and rooms back. Unknown or already deleted: 404."""
+    if not request.app.state.store.delete_reservation(number):
+        raise HTTPException(404, detail="not found")
+    return Response(status_code=204)
+
+
 @router.get("/reservations/{number}")
 def reservation(number: str, request: Request) -> dict:
     body = request.app.state.store.get_reservation(number)
