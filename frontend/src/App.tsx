@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "./api/client";
 import { build, confirmPackage, getOptions, getReservation, type BuildResult, type TripPackage } from "./api/endpoints";
 import { newIdempotencyKey } from "./api/client";
+import ChangePanel from "./components/ChangePanel";
 import PackageView from "./components/PackageView";
 import type { TripOptions, TripRequest } from "./api/types";
 import Logo from "./components/Logo";
@@ -135,6 +136,8 @@ export default function App() {
             {result?.status === "OK" && result.package && !reservation && (
               <>
                 <PackageView pkg={result.package} budget={budget} />
+                <ChangePanel id={result.package_id} pkg={result.package}
+                  onChanged={(p) => setResult({ ...result, package: p })} />
                 <button type="button" className="btn btn--primary" disabled={busy} onClick={() => confirm(result.package_id)}>
                   {busy ? "Confirming…" : "Confirm booking"}
                 </button>

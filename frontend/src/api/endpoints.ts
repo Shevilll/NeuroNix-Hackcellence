@@ -26,9 +26,13 @@ export interface TripItem {
   quantity: number;
   price_inr: number;
   status: string;
+  catalog_id?: string;
+  role?: string | null;
+  warnings?: string[];
 }
 
 export interface TripPackage {
+  version?: number;
   trip_id: string;
   start_date: string;
   end_date: string;
@@ -66,4 +70,29 @@ export async function confirmPackage(id: string, idempotencyKey: string) {
 
 export async function getReservation(number: string) {
   return (await api.request<{ reservation_number: string; package: TripPackage }>(`/api/reservations/${number}`)).data;
+}
+
+export interface ChangeOption {
+  hotel_id?: string;
+  room_id?: string;
+  flight_id?: string;
+  attraction_id?: string;
+  date?: string;
+  name: string;
+  price_diff: number;
+}
+
+export async function getOptions2(id: string, kind: string, params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return (await api.request<ChangeOption[]>(`/api/packages/${id}/options/${kind}${qs ? `?${qs}` : ""}`)).data;
+}
+
+export async function changePackage(id: string, change: Record<string, unknown>) {
+  return (
+    await api.request<{ package: TripPackage }>(`/api/packages/${id}/changes`, {
+      method: "POST",
+      body: change,
+      idempotencyKey: newIdempotencyKey(),
+    })
+  ).data;
 }

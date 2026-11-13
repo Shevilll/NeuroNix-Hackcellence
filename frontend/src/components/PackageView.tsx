@@ -34,6 +34,7 @@ export default function PackageView({ pkg, budget }: { pkg: TripPackage; budget:
               <li key={i.item_id}>
                 {ICON[i.type]} <b>{timeOf(i)}</b> {i.name} <span>({i.city})</span> — {inr(i.price_inr)}
                 {i.status === "BOOKED" && " ✔ booked"}
+                {i.warnings?.map((w) => <em key={w} role="note"> ⚠ {w}</em>)}
               </li>
             ))}
           </ul>
