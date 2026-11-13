@@ -22,7 +22,7 @@ function Shell() {
               <Icon name="home" /> <span>Plan a trip</span>
             </NavLink>
             <NavLink to="/r" className={navClass}>
-              <Icon name="search" /> <span>Find a booking</span>
+              <Icon name="search" /> <span>Bookings</span>
             </NavLink>
             <NavLink to="/check" className={navClass}>
               <Icon name="shield" /> <span>Check a trip file</span>

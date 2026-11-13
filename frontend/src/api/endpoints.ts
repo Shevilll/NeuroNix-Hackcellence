@@ -1,4 +1,4 @@
-import { api, newIdempotencyKey } from "./client";
+import { api, ApiError, newIdempotencyKey } from "./client";
 import type { TripOptions, TripRequest } from "./types";
 
 export async function getOptions(): Promise<TripOptions> {
@@ -105,6 +105,37 @@ export async function confirmPackage(id: string, idempotencyKey: string) {
 
 export async function getReservation(number: string) {
   return (await api.request<{ reservation_number: string; package: TripPackage }>(`/api/reservations/${number}`)).data;
+}
+
+/** One row of the bookings list (GET /api/reservations). */
+export interface BookingSummary {
+  reservation_number: string;
+  created_at: string;
+  country: string | null;
+  cities: string[];
+  nights_per_city: number[];
+  start_date: string | null;
+  end_date: string | null;
+  adults: number | null;
+  children: number;
+  total_inr: number;
+}
+
+export async function listReservations() {
+  return (await api.request<BookingSummary[]>("/api/reservations")).data;
+}
+
+/** Delete one booking. A 404 means it is already gone (for example a retried delete), which is fine. */
+export async function deleteReservation(number: string) {
+  try {
+    await api.request(`/api/reservations/${number}`, { method: "DELETE" });
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 404)) throw error;
+  }
+}
+
+export async function deleteAllReservations() {
+  return (await api.request<{ deleted: number }>("/api/reservations", { method: "DELETE" })).data.deleted;
 }
 
 export interface ChangeOption {

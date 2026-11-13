@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { TripPackage } from "../api/endpoints";
 import { dateRange } from "../lib/format";
+import ConfirmDelete from "./ConfirmDelete";
 import Icon from "./Icon";
 
 interface Props {
@@ -11,10 +12,13 @@ interface Props {
   showLink?: boolean;
   /** Show a print button (on the reservation page). */
   showPrint?: boolean;
+  /** Show a Delete button that asks first, then calls this. */
+  onDelete?: () => void;
+  deleting?: boolean;
 }
 
 /** The booked state (M7): the 10-digit number, how to reopen it, and copy / print shortcuts. */
-export default function ReservationCard({ number, pkg, showLink = false, showPrint = false }: Props) {
+export default function ReservationCard({ number, pkg, showLink = false, showPrint = false, onDelete, deleting = false }: Props) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -54,6 +58,16 @@ export default function ReservationCard({ number, pkg, showLink = false, showPri
             <button type="button" className="btn btn--secondary btn--sm" onClick={() => window.print?.()}>
               <Icon name="printer" /> Print
             </button>
+          )}
+          {onDelete && (
+            <ConfirmDelete
+              label={`Delete booking ${number}`}
+              text="Delete booking"
+              question="Delete this booking? It gives its seats and rooms back and cannot be undone."
+              confirmText="Yes, delete"
+              busy={deleting}
+              onConfirm={onDelete}
+            />
           )}
         </div>
       </div>

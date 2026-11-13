@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { getReservation, type TripPackage } from "../api/endpoints";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { deleteReservation, getReservation, listReservations, type BookingSummary, type TripPackage } from "../api/endpoints";
+import BookingsList from "../components/BookingsList";
 import Hero from "../components/Hero";
 import Icon from "../components/Icon";
 import PackageView from "../components/PackageView";
@@ -16,6 +17,48 @@ export default function ReservationPage() {
   const [text, setText] = useState(number ?? "");
   const [formatError, setFormatError] = useState<string | null>(null);
   const [state, setState] = useState<State>({ kind: "idle" });
+  const location = useLocation();
+  const [bookings, setBookings] = useState<BookingSummary[] | null>(null);
+  const [notice, setNotice] = useState<string | null>((location.state as { notice?: string } | null)?.notice ?? null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // A message handed over by navigate(), e.g. after deleting the booking that was open.
+  const handed = (location.state as { notice?: string } | null)?.notice;
+  useEffect(() => {
+    if (handed) setNotice(handed);
+  }, [handed, location.key]);
+
+  // The list of every booking shows when no number is open.
+  useEffect(() => {
+    if (number) return;
+    let live = true;
+    listReservations().then(
+      (rows) => live && setBookings(rows),
+      () => live && setBookings([]),
+    );
+    return () => {
+      live = false;
+    };
+  }, [number]);
+
+  function deleted(numbers: string[], message: string) {
+    setBookings((rows) => (rows ?? []).filter((b) => !numbers.includes(b.reservation_number)));
+    setNotice(message);
+  }
+
+  async function deleteOpen(n: string) {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteReservation(n);
+      navigate("/r", { state: { notice: `Booking ${n} was deleted. Its seats and rooms are free again.` } });
+    } catch {
+      setDeleteError("We could not delete this booking. Check that the backend is running, then try again.");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     if (!number) {
@@ -47,7 +90,7 @@ export default function ReservationPage() {
 
   return (
     <>
-      <Hero title="Find your booking" sub="Enter the 10-digit reservation number you got when you confirmed.">
+      <Hero title="Your bookings" sub="Open a booking with its 10-digit reservation number, or pick one from the list below.">
         <form className="lookup" onSubmit={open} noValidate>
           <label htmlFor="reservation-number" className="sr-only">
             Reservation number
@@ -77,7 +120,13 @@ export default function ReservationPage() {
         </form>
       </Hero>
       <main className="page">
-        {state.kind === "idle" && (
+        {notice && !number && (
+          <p role="status" className="page-notice">
+            <Icon name="check" /> {notice}
+          </p>
+        )}
+        {state.kind === "idle" && bookings && bookings.length > 0 && <BookingsList bookings={bookings} onDeleted={deleted} />}
+        {state.kind === "idle" && (!bookings || bookings.length === 0) && (
           <section className="card lookup-help" aria-labelledby="lookup-help-title">
             <span className="lookup-help__icon">
               <Icon name="file" />
@@ -111,7 +160,12 @@ export default function ReservationPage() {
         )}
         {state.kind === "found" && (
           <>
-            <ReservationCard number={state.number} pkg={state.pkg} showPrint />
+            {deleteError && (
+              <p role="alert" className="inline-error inline-error--box">
+                <Icon name="warning" /> {deleteError}
+              </p>
+            )}
+            <ReservationCard number={state.number} pkg={state.pkg} showPrint onDelete={() => deleteOpen(state.number)} deleting={deleting} />
             <PackageView pkg={state.pkg} budget={state.pkg.budget_inr} eyebrow="Booked holiday" />
           </>
         )}
