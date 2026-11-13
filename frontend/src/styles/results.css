@@ -73,11 +73,12 @@
 
 .day li {
   display: grid;
-  grid-template-columns: 28px 64px 1fr auto;
+  grid-template-columns: 28px 72px 1fr auto;
   align-items: baseline;
   gap: 8px;
 }
 
+.day li b { white-space: nowrap; }
 .day li .name span { color: var(--text-muted); }
 .day li .price { font-variant-numeric: tabular-nums; font-weight: 600; }
 .day li .note { grid-column: 3 / -1; color: var(--warn); font-size: 0.875rem; }
@@ -132,7 +133,7 @@
 }
 
 @media (max-width: 560px) {
-  .day li { grid-template-columns: 24px 56px 1fr; }
+  .day li { grid-template-columns: 24px 72px 1fr; }
   .day li .price { grid-column: 3; }
 }
 
@@ -151,9 +152,11 @@
 .checklist .violations { flex-direction: column; margin-top: 12px; }
 .checklist .violations li { background: none; color: var(--text); font-weight: 400; border-radius: 0; padding: 0; }
 
-.day li.has-photo { grid-template-columns: 56px 56px 1fr auto; align-items: center; }
+.day li.has-photo { grid-template-columns: 56px 72px 1fr auto; align-items: center; }
 .thumb { width: 56px; height: 40px; object-fit: cover; border-radius: 6px; background: var(--blue-50); }
 .credits__list { margin: 12px 0 0; padding-left: 20px; font-size: 0.875rem; display: flex; flex-direction: column; gap: 6px; }
 @media (max-width: 560px) { .day li.has-photo { grid-template-columns: 56px 1fr; } }
 
 .app-main.app-main--footer { margin-top: 0; padding-top: 0; }
+
+.options { max-height: 22rem; overflow-y: auto; }
