@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ApiError } from "../api/client";
 import { changePackage, getCityPlans, getOptions2, type ChangeOption, type CityPlan, type TripPackage } from "../api/endpoints";
+import CityRoute from "./CityRoute";
 
 const diff = (n: number) => (n === 0 ? "same price" : `${n > 0 ? "+" : "−"}₹${Math.abs(n).toLocaleString("en-IN")}`);
 
@@ -59,7 +60,7 @@ export default function ChangePanel({ id, pkg, onChanged }: { id: string; pkg: T
           {plans.map((p, n) => (
             <li key={n}>
               <span>
-                {p.cities.map((c, i) => `${c} (${p.nights_per_city[i]}n)`).join(" → ")} — ₹
+                <CityRoute cities={p.cities} nights={p.nights_per_city} /> — ₹
                 {p.total_inr.toLocaleString("en-IN")}
                 {!p.within_budget && " · over budget"}
                 {p.current && " · current"}

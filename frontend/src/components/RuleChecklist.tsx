@@ -1,4 +1,5 @@
 import type { CheckReport } from "../api/endpoints";
+import Icon from "./Icon";
 
 export default function RuleChecklist({ report }: { report: CheckReport }) {
   return (
@@ -6,7 +7,7 @@ export default function RuleChecklist({ report }: { report: CheckReport }) {
       <ul>
         {report.checklist.map((g) => (
           <li key={g.group} className={g.ok ? "ok" : "bad"}>
-            <span aria-hidden="true">{g.ok ? "✔" : "✖"}</span> {g.group}
+            <Icon name={g.ok ? "check" : "cross"} /> {g.group}
             <span className="sr-only">{g.ok ? " passes" : " fails"}</span>
           </li>
         ))}

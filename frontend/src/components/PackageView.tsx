@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { checkTrip, type CheckReport, type TripItem, type TripPackage } from "../api/endpoints";
+import CityRoute from "./CityRoute";
+import Icon, { ItemIcon } from "./Icon";
 import RuleChecklist from "./RuleChecklist";
 import { usePhotos } from "./usePhotos";
 
 const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
-const ICON: Record<TripItem["type"], string> = { flight: "✈️", hotel: "🏨", transfer: "🚕", attraction: "🎟️" };
 
 function dayOf(item: TripItem) {
   return item.start.slice(0, 10);
@@ -32,7 +33,7 @@ export default function PackageView({ pkg, budget }: { pkg: TripPackage; budget:
     <section className="card" aria-label="Holiday package">
       <div className="package__head">
         <div>
-          <h2>{pkg.cities.map((c, i) => `${c} (${pkg.nights_per_city[i]}n)`).join(" → ")}</h2>
+          <h2><CityRoute cities={pkg.cities} nights={pkg.nights_per_city} /></h2>
           <p className="package__summary">
             <strong>{inr(pkg.total_inr)}</strong> of {inr(budget)} budget ·{" "}
             <span className={left >= 0 ? "left" : "over"}>
@@ -56,15 +57,17 @@ export default function PackageView({ pkg, budget }: { pkg: TripPackage; budget:
                 {photos[i.catalog_id ?? ""] ? (
                   <img className="thumb" src={photos[i.catalog_id ?? ""]} alt={i.name} loading="lazy" />
                 ) : (
-                  <span aria-hidden="true">{ICON[i.type]}</span>
+                  <ItemIcon type={i.type} />
                 )}
                 <b>{timeOf(i)}</b>
                 <span className="name">
                   {i.name} <span>({i.city})</span>
-                  {i.status === "BOOKED" && " ✔ booked"}
+                  {i.status === "BOOKED" && (
+                    <span className="booked"> <Icon name="check" /> booked</span>
+                  )}
                 </span>
                 <span className="price">{inr(i.price_inr)}</span>
-                {i.warnings?.map((w) => <span key={w} role="note" className="note">⚠ {w}</span>)}
+                {i.warnings?.map((w) => <span key={w} role="note" className="note"><Icon name="warning" /> {w}</span>)}
               </li>
             ))}
           </ul>

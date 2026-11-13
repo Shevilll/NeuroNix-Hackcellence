@@ -1,0 +1,23 @@
+.icon {
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+.icon--item {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--blue-600);
+}
+
+.route {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+
+.route__arrow {
+  color: var(--text-muted);
+}
