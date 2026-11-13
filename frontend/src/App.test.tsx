@@ -57,8 +57,8 @@ describe("App submit", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("button", { name: /load menon example/i }));
-    await user.click(screen.getByRole("button", { name: /build my holiday/i }));
+    await user.click(await screen.findByRole("button", { name: /load an example/i }));
+    await user.click(screen.getByRole("menuitem", { name: /menon family/i }));
   }
 
   it("posts the request with an Idempotency-Key", async () => {
@@ -98,8 +98,8 @@ describe("App loading indicators", () => {
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("button", { name: /load menon example/i }));
-    await user.click(screen.getByRole("button", { name: /build my holiday/i }));
+    await user.click(await screen.findByRole("button", { name: /load an example/i }));
+    await user.click(screen.getByRole("menuitem", { name: /menon family/i }));
     const button = await screen.findByRole("button", { name: /building your package/i });
     expect(button.querySelector("svg.spinner")).toBeInTheDocument();
     expect(button).toBeDisabled();

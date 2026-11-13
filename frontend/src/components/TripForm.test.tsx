@@ -85,10 +85,69 @@ describe("TripForm", () => {
     expect(screen.getAllByLabelText(/age of child/i)).toHaveLength(1);
   });
 
+  it("offers examples in three groups: main example, edge cases and error cases", async () => {
+    const { user } = setup();
+    const trigger = screen.getByRole("button", { name: /load an example/i });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const menu = screen.getByRole("menu", { name: /examples/i });
+    const groups = within(menu).getAllByRole("group");
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(["Main example", "Edge cases", "Error cases"]);
+    expect(within(groups[0]).getAllByRole("menuitem")).toHaveLength(1);
+    expect(within(groups[1]).getAllByRole("menuitem").length).toBeGreaterThanOrEqual(4);
+    expect(within(groups[2]).getAllByRole("menuitem").length).toBeGreaterThanOrEqual(4);
+    // Every example says what it shows, so a judge knows what to expect before picking it.
+    for (const item of within(menu).getAllByRole("menuitem")) expect(item.textContent!.length).toBeGreaterThan(20);
+  });
+
+  it("closes the example menu with Escape and moves through it with the arrow keys", async () => {
+    const { user } = setup();
+    await user.click(screen.getByRole("button", { name: /load an example/i }));
+    const items = screen.getAllByRole("menuitem");
+    expect(items[0]).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(items[1]).toHaveFocus();
+    await user.keyboard("{ArrowUp}{ArrowUp}");
+    expect(items[items.length - 1]).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("button", { name: /load an example/i })).toHaveFocus();
+  });
+
+  it("fills the form from an edge case and builds it straight away", async () => {
+    const { user, onSubmit } = setup();
+    await user.click(screen.getByRole("button", { name: /load an example/i }));
+    await user.click(screen.getByRole("menuitem", { name: /budget exactly the total/i }));
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(onSubmit).toHaveBeenCalledWith({
+      origin: "DEL", country: "AE", start_date: "2027-04-05", nights: 5, adults: 2, children_ages: [], budget: 89997,
+    });
+    expect(screen.getByLabelText(/budget/i)).toHaveValue("89,997");
+  });
+
+  it("an error-case example with bad entries shows every field message and does not build", async () => {
+    const { user, onSubmit } = setup();
+    await user.click(screen.getByRole("button", { name: /load an example/i }));
+    await user.click(screen.getByRole("menuitem", { name: /wrong entries/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/nights must be a whole number between 3 and 10/i)).toBeInTheDocument();
+    expect(screen.getByText(/at least 1 adult is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/child ages must be whole numbers between 0 and 17/i)).toBeInTheDocument();
+  });
+
+  it("an error-case example past the data window shows the date message and does not build", async () => {
+    const { user, onSubmit } = setup();
+    await user.click(screen.getByRole("button", { name: /load an example/i }));
+    await user.click(screen.getByRole("menuitem", { name: /past the last return date/i }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/return flight must be on or before 20 April 2027/i)).toBeInTheDocument();
+  });
+
   it("loads the Menon example and submits the API request", async () => {
     const { user, onSubmit } = setup();
-    await user.click(screen.getByRole("button", { name: /load menon example/i }));
-    await user.click(screen.getByRole("button", { name: /build my holiday/i }));
+    await user.click(screen.getByRole("button", { name: /load an example/i }));
+    await user.click(screen.getByRole("menuitem", { name: /menon family/i }));
     expect(onSubmit).toHaveBeenCalledWith({
       origin: "BLR",
       country: "JP",

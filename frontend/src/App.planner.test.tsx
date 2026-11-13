@@ -13,8 +13,8 @@ afterEach(() => vi.unstubAllGlobals());
 async function buildMenon() {
   const user = userEvent.setup();
   render(<App />);
-  await user.click(await screen.findByRole("button", { name: /load menon example/i }));
-  await user.click(screen.getByRole("button", { name: /build my holiday/i }));
+  await user.click(await screen.findByRole("button", { name: /load an example/i }));
+  await user.click(screen.getByRole("menuitem", { name: /menon family/i }));
   return user;
 }
 
