@@ -35,4 +35,3 @@
 .checklist .violations { flex-direction: column; margin-top: 12px; }
 .checklist .violations li { display: block; background: none; color: var(--text); font-weight: 400; border-radius: 0; padding: 0; }
 
-.credits__list { margin: 0; padding-left: 20px; font-size: 0.875rem; display: flex; flex-direction: column; gap: 6px; }

@@ -1,7 +1,6 @@
 import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import Icon from "./components/Icon";
 import Logo from "./components/Logo";
-import PhotoCredits from "./components/PhotoCredits";
 import CheckPage from "./pages/CheckPage";
 import PlannerPage from "./pages/PlannerPage";
 import ReservationPage from "./pages/ReservationPage";
@@ -37,9 +36,6 @@ function Shell() {
         <Route path="/check" element={<CheckPage />} />
         <Route path="*" element={<PlannerPage />} />
       </Routes>
-      <div className="page page--footer">
-        <PhotoCredits />
-      </div>
     </div>
   );
 }

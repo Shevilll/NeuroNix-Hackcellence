@@ -95,7 +95,6 @@ export function stubApi(extra?: (url: string, init?: RequestInit) => Response | 
     if (url === "/api/options") return reply(200, tripOptions);
     if (url === "/api/check") return reply(200, okCheck);
     if (url === "/api/images") return reply(200, {});
-    if (url === "/api/credits") return reply(200, []);
     return reply(404, { detail: "not found" });
   };
 }

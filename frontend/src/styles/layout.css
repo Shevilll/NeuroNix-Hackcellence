@@ -114,10 +114,6 @@
   max-width: 880px;
 }
 
-.page--footer {
-  margin-top: 0;
-  padding-bottom: 32px;
-}
 
 .planner-form,
 .results {
@@ -650,18 +646,6 @@ a.btn {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-/* ---------- Footer credits ---------- */
-.credits {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.credits .notice__text {
-  margin: 0;
 }
 
 /* ---------- Small screens ---------- */

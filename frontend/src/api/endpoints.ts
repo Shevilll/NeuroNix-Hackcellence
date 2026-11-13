@@ -190,20 +190,6 @@ export async function checkTrip(trip: unknown) {
   return (await api.request<CheckReport>("/api/check", { method: "POST", body: trip })).data;
 }
 
-export interface PhotoCredit {
-  file: string;
-  used_for: string;
-  source_title: string;
-  source_url: string;
-  author: string;
-  license: string;
-  license_url: string;
-}
-
 export async function getImages() {
   return (await api.request<Record<string, string>>("/api/images")).data;
-}
-
-export async function getCredits() {
-  return (await api.request<PhotoCredit[]>("/api/credits")).data;
 }
