@@ -139,7 +139,13 @@
 }
 
 .section-title {
+  display: inline-block;
   margin: 0 0 12px;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--blue-900);
+  box-shadow: var(--shadow);
   font-size: 1.375rem;
   font-weight: 800;
   letter-spacing: -0.01em;
