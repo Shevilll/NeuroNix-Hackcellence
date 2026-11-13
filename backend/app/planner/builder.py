@@ -169,6 +169,55 @@ def _attractions(catalog, request, stays):
     return chosen
 
 
+def _cheapest_visits(catalog, request, stays):
+    """One attraction on every full day at the lowest total cost, each used once.
+
+    An exact search per city: taking the cheapest open attraction day by day can use up an
+    attraction that is the only cheap choice for a later day. Ties prefer child-friendly places
+    when there are children, then the earlier attraction id.
+    """
+    children = len(request.children_ages)
+    days_by_city: dict[str, list[date]] = {}
+    for index, (city, first_night, nights, _opt) in enumerate(stays):
+        for n in range(nights):
+            day = first_night + timedelta(days=n)
+            if day == request.start_date or (n == 0 and index > 0):
+                continue
+            days_by_city.setdefault(city, []).append(day)
+
+    chosen = []
+    for city, days in days_by_city.items():
+        pool = sorted(catalog.attractions_in(city), key=lambda a: a.attraction_id)
+        costs = [pricing.attraction_cost(a, request.adults, children) for a in pool]
+        unsuitable = [int(children > 0 and not a.child_friendly) for a in pool]
+        layer: dict[int, tuple[int, int, tuple[int, ...]]] = {0: (0, 0, ())}  # used set -> (cost, unsuitable, picks)
+        for day in days:
+            allowed = []
+            for i, a in enumerate(pool):
+                start = max(a.open_from, DAY_START)
+                if (weekday_code(day) in a.open_days and day not in a.closed_dates
+                        and start + a.visit_minutes <= a.open_until and start + a.visit_minutes <= 1440):
+                    allowed.append(i)
+            following: dict[int, tuple[int, int, tuple[int, ...]]] = {}
+            for used, (cost, bad, picks) in layer.items():
+                for i in allowed:
+                    if used >> i & 1:
+                        continue
+                    state = (cost + costs[i], bad + unsuitable[i], picks + (i,))
+                    key = used | 1 << i
+                    if key not in following or state < following[key]:
+                        following[key] = state
+            if not following:
+                return None
+            layer = following
+        _, _, picks = min(layer.values())
+        for day, i in zip(days, picks):
+            a = pool[i]
+            start = max(a.open_from, DAY_START)
+            chosen.append((a, _at(day, start), _at(day, start + a.visit_minutes), costs[i]))
+    return chosen
+
+
 # ------------------------------------------------------------------ assembly
 
 
@@ -269,7 +318,7 @@ def _build_plan(request, catalog, order, split, objective="cheapest"):
     def finish(arrival, ret, picked):
         # picked: list of chosen hotel option per stay
         chosen = [(c, d, n, picked[i]) for i, (c, d, n, _o) in enumerate(stays)]
-        visits = _attractions(catalog, request, chosen)
+        visits = (_cheapest_visits if objective == "cheapest" else _attractions)(catalog, request, chosen)
         if visits is None:
             return None
         pkg = _assemble(request, catalog, order, split, arrival, ret, chosen, changes, visits)
@@ -285,11 +334,42 @@ def _build_plan(request, catalog, order, split, objective="cheapest"):
                 best = pkg
 
     middle = [s[3][0] for s in stays]
+    # The cheapest and recommended builds pick the hotel, flight and airport transfer *together*:
+    # a hotel that costs a little more can sit where the airport transfer is much cheaper.
+    cheap_like = objective in ("cheapest", "recommended")
     if len(order) == 1:
-        for opt in stays[0][3][:12]:
-            a, r = _best_arrival(catalog, request, arrivals, opt[1], objective), _best_return(catalog, request, returns, opt[1], objective)
-            if a and r:
-                consider(finish(a, r, [opt]))
+        if cheap_like:
+            scored = []
+            for opt in stays[0][3]:
+                a = _best_arrival(catalog, request, arrivals, opt[1], objective)
+                r = _best_return(catalog, request, returns, opt[1], objective)
+                if a and r:
+                    scored.append((opt[0] + a[0] + r[0], opt[1].hotel_id, opt[2].room_id, opt, a, r))
+            for *_key, opt, a, r in sorted(scored, key=lambda t: t[:3])[:4]:
+                pkg = finish(a, r, [opt])
+                if pkg:
+                    consider(pkg)
+                    break
+        else:
+            for opt in stays[0][3][:12]:
+                a, r = _best_arrival(catalog, request, arrivals, opt[1], objective), _best_return(catalog, request, returns, opt[1], objective)
+                if a and r:
+                    consider(finish(a, r, [opt]))
+    elif cheap_like:
+        firsts = sorted(
+            ((o[0] + a[0], o[1].hotel_id, o[2].room_id, o, a)
+             for o in stays[0][3] if (a := _best_arrival(catalog, request, arrivals, o[1], objective))),
+            key=lambda t: t[:3])[:3]
+        lasts = sorted(
+            ((o[0] + r[0], o[1].hotel_id, o[2].room_id, o, r)
+             for o in stays[-1][3] if (r := _best_return(catalog, request, returns, o[1], objective))),
+            key=lambda t: t[:3])[:3]
+        pairs = sorted(((f[0] + l[0], f, l) for f in firsts for l in lasts), key=lambda t: (t[0], t[1][1:3], t[2][1:3]))
+        for _total, f, l in pairs:
+            pkg = finish(f[4], l[4], [f[3], *middle[1:-1], l[3]])
+            if pkg:
+                consider(pkg)
+                break
     else:
         first = next(((o, a) for o in stays[0][3] if (a := _best_arrival(catalog, request, arrivals, o[1], objective))), None)
         last = next(((o, r) for o in stays[-1][3] if (r := _best_return(catalog, request, returns, o[1], objective))), None)
@@ -302,7 +382,7 @@ def _build_plan(request, catalog, order, split, objective="cheapest"):
 # ------------------------------------------------------------------ public
 
 
-def build_for_plan(request: TripRequest, catalog: Catalog, order, split, objective: str = "cheapest"):
+def build_for_plan(request: TripRequest, catalog: Catalog, order, split, objective: str = "recommended"):
     """The package for one chosen city plan (G3), or None when that plan cannot be built."""
     return _build_plan(request, catalog, tuple(order), tuple(split), objective)
 
@@ -317,7 +397,7 @@ def build_package(request: TripRequest, catalog: Catalog, explain: bool = True) 
 
     plans = list(city_plans(request, catalog))
     by_objective: dict[str, list[dict[str, Any]]] = {}
-    for objective in (("cheapest", "fastest", "best_rated") if explain else ("cheapest",)):
+    for objective in (("cheapest", "recommended", "fastest", "best_rated") if explain else ("cheapest",)):
         found = (_build_plan(request, catalog, order, split, objective) for order, split in plans)
         by_objective[objective] = [p for p in found if p]
     candidates = by_objective["cheapest"]
@@ -338,11 +418,20 @@ def build_package(request: TripRequest, catalog: Catalog, explain: bool = True) 
             result["suggestions"] = [d["message"] for d in details]
             result["suggestion_details"] = details
         return result
+    # The plan comes from the truly cheapest builds (most cities, then lowest price). The package
+    # shown is the same plan built in the recommended style (child-friendly attractions first)
+    # when that still fits the budget.
     best = min(within, key=lambda p: (-len(p["cities"]), p["total_inr"]))
     if not explain:
         return {"status": "OK", "package": best}
+    same_plan = [p for p in by_objective["recommended"]
+                 if p["cities"] == best["cities"] and p["nights_per_city"] == best["nights_per_city"]
+                 and p["total_inr"] <= request.budget]
+    best = same_plan[0] if same_plan else best
     alternatives = {}
     for objective, found in by_objective.items():
+        if objective == "recommended":
+            continue
         ok = [p for p in found if p["total_inr"] <= request.budget]
         alternatives[objective] = dict(min(ok, key=lambda p: _score(p, objective)) if ok else min(within, key=lambda p: _score(p, objective)))
         alternatives[objective]["objective"] = objective
