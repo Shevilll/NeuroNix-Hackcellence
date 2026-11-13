@@ -92,6 +92,26 @@ def test_child_without_age_is_flagged(catalog):
     assert "children_ages" in r["missing"] or "children_ages" in r["unclear"]
 
 
+@pytest.mark.parametrize("text,count", [
+    ("departure from delhi and destination is uae, start date is 11 april 2027, for 5 nights, "
+     "1 adult and 2 children, and the budget is 5 lakh", 2),
+    ("2 adults and two kids from Mumbai to Japan", 2),
+    ("2 adults and a child to Japan", 1),
+    ("2 adults with 3 kids", 3),
+])
+def test_children_count_is_kept_when_ages_are_missing(catalog, text, count):
+    r = parse_quick_request(text, catalog)
+    assert r["fields"]["children_count"] == count
+    assert "children_ages" not in r["fields"]
+    assert "children_ages" in r["unclear"]
+
+
+def test_no_children_count_when_ages_are_given(catalog):
+    r = parse_quick_request("2 adults and 2 kids aged 4 and 9", catalog)
+    assert r["fields"]["children_ages"] == [4, 9]
+    assert "children_count" not in r["fields"]
+
+
 def test_garbage_input_is_safe(catalog):
     assert parse_quick_request("", catalog)["fields"] == {}
     assert parse_quick_request("🎉" * 50 + " 99999999999 nights", catalog)["fields"].get("nights") is None

@@ -183,6 +183,26 @@ describe("TripForm", () => {
     expect(screen.getByText(/on or before 20 April 2027/)).toBeInTheDocument();
   });
 
+  it("shows one empty age box per child when the quick request gives a count but no ages", () => {
+    setup({
+      prefill: { origin: "DEL", country: "AE", start_date: "2027-04-11", nights: 5, adults: 1, children_count: 2 },
+    });
+    expect(screen.getByLabelText(/^children$/i)).toHaveValue(2);
+    expect(screen.getByLabelText(/age of child 1/i)).toHaveValue(null);
+    expect(screen.getByLabelText(/age of child 2/i)).toHaveValue(null);
+  });
+
+  it("replaces earlier children when a new quick request gives a different count", () => {
+    const { rerender } = render(
+      <TripForm options={options} onSubmit={vi.fn()} prefill={{ adults: 2, children_ages: [6] }} />,
+    );
+    expect(screen.getByLabelText(/age of child 1/i)).toHaveValue(6);
+    rerender(<TripForm options={options} onSubmit={vi.fn()} prefill={{ adults: 1, children_count: 2 }} />);
+    expect(screen.getByLabelText(/^children$/i)).toHaveValue(2);
+    expect(screen.getByLabelText(/age of child 1/i)).toHaveValue(null);
+    expect(screen.getByLabelText(/age of child 2/i)).toHaveValue(null);
+  });
+
   it("clears a field's message when the user edits it", async () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: /build my holiday/i }));
