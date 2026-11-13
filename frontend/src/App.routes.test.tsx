@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { makePackage, reply, stubApi } from "./test/fixtures";
+import { bookings, makePackage, noContent, reply, stubApi } from "./test/fixtures";
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -11,12 +11,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("navigation", () => {
-  it("has links to plan a trip, find a booking and check a trip file", async () => {
+  it("has links to plan a trip, the bookings and check a trip file", async () => {
     vi.stubGlobal("fetch", vi.fn(stubApi()));
     render(<App />);
     const nav = screen.getByRole("navigation");
     expect(within(nav).getByRole("link", { name: /plan a trip/i })).toHaveAttribute("href", "/");
-    expect(within(nav).getByRole("link", { name: /find a booking/i })).toHaveAttribute("href", "/r");
+    expect(within(nav).getByRole("link", { name: /^bookings$/i })).toHaveAttribute("href", "/r");
     expect(within(nav).getByRole("link", { name: /check a trip file/i })).toHaveAttribute("href", "/check");
   });
 });
@@ -68,6 +68,123 @@ describe("/r without a number", () => {
     const help = screen.getByRole("region", { name: /where to find your number/i });
     expect(help).toHaveTextContent(/10-digit/);
     expect(within(help).getByRole("link", { name: /plan a trip/i })).toHaveAttribute("href", "/");
+  });
+});
+
+/** A fetch stub with two bookings that records DELETE calls; `fail` makes deletes fail. */
+function bookingsApi(fail = false) {
+  const deletes: string[] = [];
+  let rows = [...bookings];
+  const fetchMock = vi.fn(stubApi((url, init) => {
+    if (init?.method === "DELETE") {
+      deletes.push(url);
+      if (fail) return reply(500, { detail: "boom" });
+      if (url === "/api/reservations") {
+        const deleted = rows.length;
+        rows = [];
+        return reply(200, { deleted });
+      }
+      rows = rows.filter((r) => !url.endsWith(r.reservation_number));
+      return noContent();
+    }
+    if (url === "/api/reservations") return reply(200, rows);
+    return undefined;
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  return deletes;
+}
+
+describe("/r: all bookings, with delete (demo reset)", () => {
+  it("lists every booking with its number, route, dates, travellers and total", async () => {
+    bookingsApi();
+    window.history.pushState({}, "", "/r");
+    render(<App />);
+    const list = await screen.findByRole("region", { name: /all bookings/i });
+    expect(within(list).getByRole("heading", { name: /all bookings \(2\)/i })).toBeInTheDocument();
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("4435693622");
+    expect(rows[0]).toHaveTextContent(/Tokyo/);
+    expect(rows[0]).toHaveTextContent(/Osaka/);
+    expect(rows[0]).toHaveTextContent("10 – 16 Apr 2027");
+    expect(rows[0]).toHaveTextContent("2 adults, 1 child");
+    expect(rows[0]).toHaveTextContent("₹2,31,924");
+    expect(within(rows[0]).getByRole("link", { name: /open booking 4435693622/i })).toHaveAttribute("href", "/r/4435693622");
+    expect(rows[1]).toHaveTextContent("3199595112");
+  });
+
+  it("deletes one booking only after the traveller confirms", async () => {
+    const deletes = bookingsApi();
+    const user = userEvent.setup();
+    window.history.pushState({}, "", "/r");
+    render(<App />);
+    const list = await screen.findByRole("region", { name: /all bookings/i });
+    await user.click(within(list).getByRole("button", { name: /delete booking 4435693622/i }));
+    expect(deletes).toEqual([]);
+    expect(within(list).getByText(/gives its seats and rooms back/i)).toBeInTheDocument();
+    await user.click(within(list).getByRole("button", { name: /yes, delete/i }));
+    expect(await screen.findByRole("status")).toHaveTextContent(/booking 4435693622 was deleted/i);
+    expect(deletes).toEqual(["/api/reservations/4435693622"]);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(list).getByRole("heading", { name: /all bookings \(1\)/i })).toBeInTheDocument();
+  });
+
+  it("keeps the booking when the traveller says no", async () => {
+    const deletes = bookingsApi();
+    const user = userEvent.setup();
+    window.history.pushState({}, "", "/r");
+    render(<App />);
+    const list = await screen.findByRole("region", { name: /all bookings/i });
+    await user.click(within(list).getByRole("button", { name: /delete booking 4435693622/i }));
+    await user.click(within(list).getByRole("button", { name: /keep it/i }));
+    expect(deletes).toEqual([]);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("deletes every booking after one confirmation, then shows where numbers come from", async () => {
+    const deletes = bookingsApi();
+    const user = userEvent.setup();
+    window.history.pushState({}, "", "/r");
+    render(<App />);
+    const list = await screen.findByRole("region", { name: /all bookings/i });
+    await user.click(within(list).getByRole("button", { name: /delete all bookings/i }));
+    expect(within(list).getByText(/all 2 bookings/i)).toBeInTheDocument();
+    await user.click(within(list).getByRole("button", { name: /yes, delete all/i }));
+    expect(await screen.findByRole("status")).toHaveTextContent(/2 bookings were deleted/i);
+    expect(deletes).toEqual(["/api/reservations"]);
+    expect(screen.queryByRole("region", { name: /all bookings/i })).toBeNull();
+    expect(screen.getByRole("region", { name: /where to find your number/i })).toBeInTheDocument();
+  });
+
+  it("says so when a delete fails and keeps the booking in the list", async () => {
+    bookingsApi(true);
+    const user = userEvent.setup();
+    window.history.pushState({}, "", "/r");
+    render(<App />);
+    const list = await screen.findByRole("region", { name: /all bookings/i });
+    await user.click(within(list).getByRole("button", { name: /delete booking 4435693622/i }));
+    await user.click(within(list).getByRole("button", { name: /yes, delete/i }));
+    expect(await screen.findByRole("alert", {}, { timeout: 5000 })).toHaveTextContent(/could not delete/i);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("deletes the booking that is open on its own page and goes back to the list", async () => {
+    const booked = makePackage({ items: makePackage().items.map((i) => ({ ...i, status: "BOOKED" })) });
+    const deletes: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(stubApi((url, init) => {
+      if (init?.method === "DELETE") { deletes.push(url); return noContent(); }
+      if (url === "/api/reservations/4435693622") return reply(200, { reservation_number: "4435693622", package: booked });
+      return undefined;
+    })));
+    const user = userEvent.setup();
+    window.history.pushState({}, "", "/r/4435693622");
+    render(<App />);
+    await screen.findByRole("heading", { name: /reservation 4435693622/i });
+    await user.click(screen.getByRole("button", { name: /delete booking 4435693622/i }));
+    await user.click(screen.getByRole("button", { name: /yes, delete/i }));
+    expect(await screen.findByRole("status")).toHaveTextContent(/booking 4435693622 was deleted/i);
+    expect(deletes).toEqual(["/api/reservations/4435693622"]);
+    expect(window.location.pathname).toBe("/r");
   });
 });
 

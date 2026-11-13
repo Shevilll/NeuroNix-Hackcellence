@@ -67,6 +67,19 @@ export const credits = [
     license: "CC0", license_url: "http://creativecommons.org/publicdomain/zero/1.0/deed.en" },
 ];
 
+/** Two bookings as GET /api/reservations returns them, newest first. */
+export const bookings = [
+  { reservation_number: "4435693622", created_at: "2026-11-13T09:10:00+00:00", country: "Japan",
+    cities: ["Tokyo", "Kyoto", "Osaka"], nights_per_city: [2, 2, 2], start_date: "2027-04-10", end_date: "2027-04-16",
+    adults: 2, children: 1, total_inr: 231924 },
+  { reservation_number: "3199595112", created_at: "2026-11-13T08:00:00+00:00", country: "United Arab Emirates",
+    cities: ["Dubai", "Abu Dhabi"], nights_per_city: [2, 3], start_date: "2027-04-05", end_date: "2027-04-10",
+    adults: 2, children: 0, total_inr: 89997 },
+];
+
+/** An empty answer, like a 204 from a DELETE. */
+export const noContent = () => new Response(null, { status: 204 });
+
 /** A JSON Response for a stubbed fetch. */
 export const reply = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -106,6 +119,7 @@ export function stubApi(extra?: (url: string, init?: RequestInit) => Response | 
     if (url === "/api/check") return reply(200, okCheck);
     if (url === "/api/images") return reply(200, {});
     if (url === "/api/credits") return reply(200, credits);
+    if (url === "/api/reservations" && (!init?.method || init.method === "GET")) return reply(200, []);
     return reply(404, { detail: "not found" });
   };
 }
