@@ -30,6 +30,7 @@ def test_every_hotel_option_applies_to_a_valid_package(catalog, menon):
     city = menon["cities"][1]
     options = list_options(menon, catalog, "hotels", city=city)
     assert options
+    assert all(" · " in o["name"] for o in options)  # the room type is named, so two rooms of one hotel differ
     for opt in options[:5]:
         new = apply_change(menon, catalog, {"op": "replace_hotel", "city": city,
                                             "hotel_id": opt["hotel_id"], "room_id": opt["room_id"]})
