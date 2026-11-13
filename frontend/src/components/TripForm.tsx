@@ -7,7 +7,9 @@ import {
   type FormErrors,
   type FormValues,
 } from "../domain/requestValidation";
+import type { Example } from "../domain/examples";
 import DatePicker from "./DatePicker";
+import ExampleMenu from "./ExampleMenu";
 import Select from "./Select";
 import Spinner from "./Spinner";
 import "./TripForm.css";
@@ -20,16 +22,6 @@ const EMPTY: FormValues = {
   adults: "",
   childAges: [],
   budget: "",
-};
-
-const MENON: FormValues = {
-  origin: "BLR",
-  country: "JP",
-  startDate: "2027-04-10",
-  nights: "6",
-  adults: "2",
-  childAges: ["6"],
-  budget: "3,50,000",
 };
 
 interface Props {
@@ -84,17 +76,23 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
     setErrors((e) => ({ ...e, childAges: undefined, adults: undefined }));
   }
 
-  function loadExample() {
-    setValues(MENON);
-    setChildCount(String(MENON.childAges.length));
-    setErrors({});
+  /** Check the values like a submit would, then build them; field messages show if any are wrong. */
+  function send(next: FormValues) {
+    const found = validateForm(next, options);
+    setErrors(found);
+    if (Object.keys(found).length === 0) onSubmit(toRequest(next));
+  }
+
+  /** Fill the form from an example and build it straight away (error-case examples show their messages). */
+  function runExample(example: Example) {
+    setValues(example.values);
+    setChildCount(example.values.childAges.length ? String(example.values.childAges.length) : "");
+    send(example.values);
   }
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const found = validateForm(values, options);
-    setErrors(found);
-    if (Object.keys(found).length === 0) onSubmit(toRequest(values));
+    send(values);
   }
 
   const field = (key: ErrorKey) => ({
@@ -112,9 +110,7 @@ export default function TripForm({ options, onSubmit, busy = false, serverError,
     <form className="card trip-form" onSubmit={submit} noValidate>
       <div className="trip-form__head">
         <h2>Tell us about your trip</h2>
-        <button type="button" className="btn btn--secondary" onClick={loadExample}>
-          Load Menon example
-        </button>
+        <ExampleMenu onPick={runExample} disabled={busy} />
       </div>
 
       {serverError && (
