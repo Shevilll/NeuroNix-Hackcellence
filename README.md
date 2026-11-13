@@ -43,7 +43,11 @@ while keeping every rule true, and books it under a 10-digit reservation number.
 ./scripts/start.sh    # backend on :8000 and frontend on :5173
 ```
 
-Then open **http://localhost:5173**.
+Then open **http://localhost:5173**. The first start creates the database; nothing else is needed.
+
+If a port is taken, choose others: `BACKEND_PORT=8010 FRONTEND_PORT=5180 ./scripts/start.sh` (the frontend
+is pointed at the chosen backend port automatically, and the frontend refuses to start on a busy port
+with a clear error instead of silently picking another one).
 
 | Command | What it does |
 |---|---|
@@ -92,13 +96,13 @@ Status legend: **Done** · **Partly** · **Planned**
 | # | Feature | How we meet it | Status |
 |---|---|---|---|
 | M1 | Request form | 7 fields; departure cities and countries come from the API (read from `destinations.json`); every invalid value gets a clear, field-level message | Done |
-| M2 | Build one package | The backend chooses the city plan and builds a full package; when none is possible it says so and why | Done |
+| M2 | Build one package | The backend chooses the city plan and builds a full package; when none is possible it says why (no flight, not enough seats, flights that cannot connect, no rooms) and lists other dates or lengths that do work | Done |
 | M3 | Rules are respected | One validator checks every rule of section 4 before a package is shown, changed, exported, or booked | Done |
 | M4 | Day-by-day plan | Timeline per day in time order: flights, transfers, hotel check-in/out, attractions | Done |
 | M5 | Total and budget | Total in INR, budget, amount left or over; JSON export in the shared trip format | Done |
 | M6 | Change the package | Change hotel, change a flight, add or remove attractions; the whole package is re-checked and re-priced, or the change is refused with a reason | Done |
 | M7 | Confirm and reservation summary | Unique 10-digit number; the summary opens after a backend restart; a wrong number shows "not found" | Done |
-| M8 | Budget too small | Says so, shows the cheapest total, and suggests concrete changes that do fit | Done |
+| M8 | Budget too small | Says so, shows the cheapest total and the gap, and suggests changes that were actually solved and fit the budget (fewer nights, other start dates, or the budget needed). Each suggestion is a button that re-runs the request | Done |
 
 ### Good to have
 
@@ -164,6 +168,10 @@ flowchart TB
   behaviour easy to test and to explain.
 - **Thin layers.** Routers → services (planner, changes, store) → pure domain functions (rules, pricing,
   time). Domain functions do no I/O and are unit-tested in isolation.
+- **A consistent, accessible UI.** Light theme only, in Booking blue, white and near-black text, with every
+  colour defined once as a token. Every icon is an inline SVG that takes the text colour, never an emoji
+  (tests fail if one appears in the UI or in backend messages). Status is always shown with an icon and
+  words, not colour alone; inputs are labelled; loading states announce themselves to screen readers.
 
 | Layer | Tech |
 |---|---|
@@ -225,13 +233,13 @@ so times are compared directly there. Flight duration comes from `duration_minut
 local timestamps. Service windows handle `24:00` (end of day) and windows that run past midnight
 (for example `06:00`–`00:30`); both ends are inclusive.
 
-**When nothing works.**
+**When nothing works.** Nothing is guessed: every suggestion below was solved with the real builder.
 
 | Situation | Response |
 |---|---|
-| Invalid value | HTTP 422 with a message per field (unknown city/country, nights outside 3–10, dates outside 1–20 April 2027, child age outside 0–17, budget not positive, …) |
-| No possible package | `NO_PACKAGE` with the reason, e.g. "No flight from Delhi lands in Japan on 2 April 2027", plus nearby dates that do work |
-| Packages exist, none in budget | `OVER_BUDGET` with the cheapest total, how much it is over, and suggestions that were actually re-solved (fewer nights, other dates, fewer cities, budget needed) |
+| Invalid value | HTTP 422 with a message per field (unknown city/country, nights outside 3–10, dates outside 1–20 April 2027, child age outside 0–17, more travelers than any flight has seats for, budget not positive, …). Wrongly typed values (a list as the origin, `NaN` as the budget) get the same clean 422, never a server error. |
+| No possible package | `NO_PACKAGE` with one reason per cause, using unique codes: `NO_ARRIVAL_FLIGHT`, `NO_RETURN_FLIGHT`, `NOT_ENOUGH_SEATS` / `NOT_ENOUGH_SEATS_RETURN`, `FLIGHTS_DONT_CONNECT` (for example 9 travelers: the only 9-seat arrival lands in Tokyo but the only 9-seat return leaves from Kyoto/Osaka, and each city needs 2 nights), `NO_ROOMS`, and `NO_VALID_COMBINATION` only as a last resort. It also returns `nearby`: up to 5 other start dates or lengths that really produce a package, nearest first, each with its total and whether it fits the budget. |
+| Packages exist, none in budget | `OVER_BUDGET` with the cheapest total, how much it is over, the cheapest package, and `suggestion_details`: fewer nights and other start dates that were solved and fit the budget (each with its total), then how much to raise the budget. More nights is sometimes cheaper in this data because flight prices differ by date, so a suggestion appears only when it was really solved. |
 
 ---
 
@@ -287,13 +295,13 @@ Base URL: `http://localhost:8000/api`
 |---|---|---|
 | `GET` | `/health` | Liveness check |
 | `GET` | `/options` | Departure cities, countries, night limits, data window — for the form |
-| `POST` | `/packages` | Build from a request (optional `Idempotency-Key`). `status: "OK"` returns the recommended package and `alternatives` (`cheapest`, `fastest`, `best_rated`), each with its own `package_id`. Otherwise `NO_PACKAGE` with reasons, or `OVER_BUDGET` with the cheapest total, how much it is over, the cheapest package and suggestions. Invalid fields give `422` with one message per field. |
+| `POST` | `/packages` | Build from a request (optional `Idempotency-Key`). `status: "OK"` returns the recommended package and `alternatives` (`cheapest`, `fastest`, `best_rated`), each with its own `package_id`. Otherwise `NO_PACKAGE` with `reasons` and `nearby` options, or `OVER_BUDGET` with the cheapest total, how much it is over, the cheapest package, `suggestions` (text) and `suggestion_details` (structured). Invalid fields give `422` with one message per field. |
 | `GET` | `/packages/{id}` | A package: items in the trip format, total, budget, version |
 | `GET` | `/packages/{id}/options/hotels?city=` | Valid hotel + room alternatives, each with `price_diff` |
 | `GET` | `/packages/{id}/options/flights?role=arrival_flight\|return_flight` | Valid flight alternatives with `price_diff` |
 | `GET` | `/packages/{id}/options/attractions` | Attractions that can be added, per day, with `price_diff` |
 | `GET` | `/packages/{id}/city-plans` | Every valid city plan with its total and whether it fits the budget |
-| `POST` | `/packages/{id}/changes` | One change with `expected_version`: `replace_hotel`, `replace_flight`, `add_attraction`, `remove_attraction`, `change_cities`. `422` with the reason when refused, `409` for a stale version |
+| `POST` | `/packages/{id}/changes` | One change with `expected_version`: `replace_hotel`, `replace_flight`, `add_attraction`, `remove_attraction`, `change_cities`. `422` with the reason when refused, `409` for a stale version. The answer also carries `price_diff_inr` and `warnings` (for example `OVER_BUDGET`, or `EMPTY_DAY` when a day is left without attractions) |
 | `GET` | `/packages/{id}/export` | Download the package as trip-format JSON |
 | `POST` | `/packages/{id}/confirm` | Book it. Needs an `Idempotency-Key` header. `409 SOLD_OUT` when the last seats or rooms are gone |
 | `GET` | `/reservations/{number}` | Reservation summary, or `404 {"detail": "not found"}` |
@@ -323,10 +331,15 @@ The export follows the shared trip format in the organisers' data dictionary (se
 additions this problem asks for: `country` on the trip, `room_id` on hotel items, and after confirm
 `status: "BOOKED"` on every item and `booking.reference` set to the reservation number as a string.
 
+Beyond the format, the export carries a few extra fields that the app uses to reopen a package (`cities`,
+`nights_per_city`, `travel_minutes`, `avg_stars`, `version`, and a `role` on each item such as
+`arrival_flight`). The request has no traveler-name field, so `traveler.name` is the placeholder
+"Traveler".
+
 ```json
 {
   "trip_id": "pkg_…",
-  "traveler": { "name": "Menon family", "home_airport": "BLR", "adults": 2, "children": 1, "child_ages": [6] },
+  "traveler": { "name": "Traveler", "home_airport": "BLR", "adults": 2, "children": 1, "child_ages": [6] },
   "start_date": "2027-04-10",
   "end_date": "2027-04-16",
   "country": "Japan",
@@ -355,11 +368,14 @@ We work test-first: the tests for a module are written and committed before the 
 | Time | `24:00`, windows past midnight, inclusive ends, weekdays of known dates |
 | Planner | City-plan enumeration, the Menon request, over-budget and no-package cases, invalid input |
 | Exhaustive / property-based | Every departure city × country × start date × nights × party shape × budget: the result is either a package with **zero** violations or a clear `NO_PACKAGE` / `OVER_BUDGET` — never an invalid package |
-| Changes | Every change gives a valid package or a refusal with a reason; totals and versions update |
+| Changes | Every change gives a valid package or a refusal with a reason; totals and versions update. Fuzzed: every flight, hotel, room and attraction on every day, and random chains of changes, must give a valid package or a refusal, never mutate the input, and show the price difference they list |
+| Explanations | Every "nearby" option and every over-budget suggestion is re-solved and must be exactly as stated; reason codes are unique |
+| Broken input | Hundreds of random payloads (wrong types, `NaN`, `Infinity`, nested junk) must give 200 or 422, never a server error |
+| House rules | A test fails if an emoji or pictogram character appears in UI source or backend text, or if the theme gains a dark mode or loses its brand tokens |
 | API / integration | Idempotent confirm (same key twice → same number; concurrent confirms → one reservation), persistence across restart, `not found`, export shape |
 | Data guard | Checksums prove `data/catalog/` is byte-identical to the organiser files |
 | Parser | The quick-request parser: budgets, dates, nights, origin, country, travellers |
-| Frontend | Form messages, retrying API client, quick-request box |
+| Frontend | Form messages, retrying API client, quick-request box, icons, loading states, and acting on a "try these dates" or "raise budget" suggestion |
 
 ```bash
 cd backend && .venv/bin/pytest -q
@@ -378,20 +394,23 @@ NeuroNix-Hackcellence/
 ├── scripts/                   # setup.sh, start.sh
 ├── backend/
 │   ├── app/
-│   │   ├── api/               # thin FastAPI routers: options, packages, quick
+│   │   ├── api/               # thin FastAPI routers: options, packages, quick, check, images
 │   │   ├── catalog/           # loader, typed records, indexes, availability minus holds
 │   │   ├── domain/            # request validation (M1), pricing, time helpers
-│   │   ├── rules/validate.py  # the single rule validator
+│   │   ├── rules/             # validate.py (the single rule validator), check.py (trip file checker)
 │   │   ├── planner/           # city plans, builder + objectives, diagnostics (M2/M8)
 │   │   ├── changes/           # change operations, options with price diffs, city plans
 │   │   ├── quick/parser.py    # rule-based quick-request parser (S1)
-│   │   └── store/             # SQLite: packages, reservations, idempotency, inventory holds
+│   │   └── store/             # SQLite: db (WAL, retry), packages (versioned), idempotency,
+│   │                          #   reservations, inventory holds
 │   └── tests/                 # unit, integration, fuzz
 └── frontend/
     └── src/
         ├── api/               # client with retry + idempotency, endpoints, types
         ├── domain/            # form validation
-        └── components/        # TripForm, QuickRequest, PackageView, ChangePanel
+        ├── styles/            # tokens (the only place colours are defined), base, results
+        └── components/        # TripForm, QuickRequest, PackageView, ChangePanel, RuleChecklist,
+                               #   CheckerPanel, NoPackageNotice, OverBudgetNotice, Icon, Spinner, ...
 ```
 
 ---
@@ -408,10 +427,12 @@ NeuroNix-Hackcellence/
 - For a very early return flight, the hotel-to-airport pickup can be the evening before (still inside
   service hours, and that evening is a booked hotel night).
 - No login and no payment: "confirm" saves the reservation in the app's own database.
-- The first package has one attraction per full day (the rules allow one or two); the traveler can add more.
+- The first package has one attraction per full day (the rules allow one or two); the traveler can add a second. After a change a day may have none (the traveler may remove a visit), and the app warns about it; more than two on one day is refused.
+- The builder picks the cheapest valid flights, hotel and transfers for each city plan and compares plans; it does not search every combination of parts across cities, so on rare dates a slightly cheaper mix could exist.
+- The cheapest and fastest packages can be the same package when one is both.
+- The request has no traveler-name field, so the exported `traveler.name` is a placeholder.
 - "Best rated" picks the top-star hotel in each city and skips city plans where that exceeds the budget; it does not mix tiers to squeeze under the budget.
 - Hotel photos are generic room photos shared by several hotels, because the hotels in the data are fictional.
-- This section will be updated with anything unfinished at code freeze.
 
 ---
 
