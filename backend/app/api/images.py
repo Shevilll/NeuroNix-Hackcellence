@@ -7,7 +7,8 @@ from fastapi import APIRouter, Request
 
 router = APIRouter()
 
-_LINK = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
+# A markdown link whose URL may hold balanced brackets, e.g. File:Mosque_(15856602738).jpg
+_LINK = re.compile(r"\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))*)\)")
 
 
 def parse_credits(markdown: str) -> list[dict[str, str]]:
