@@ -65,7 +65,7 @@ def parse_request(payload: dict[str, Any], catalog: Catalog) -> TripRequest:
     origin = payload.get("origin")
     if origin is None or origin == "":
         errors["origin"] = "Choose a departure city."
-    elif origin not in {c.airport for c in catalog.departure_cities}:
+    elif not isinstance(origin, str) or origin not in {c.airport for c in catalog.departure_cities}:
         errors["origin"] = "Choose a departure city from the list."
 
     # country: accept the code ("JP") or the name ("Japan")
@@ -75,7 +75,7 @@ def parse_request(payload: dict[str, Any], catalog: Catalog) -> TripRequest:
         errors["country"] = "Choose a destination country."
     else:
         for known in catalog.countries.values():
-            if country in (known.code, known.name):
+            if isinstance(country, str) and country in (known.code, known.name):
                 country_name = known.name
         if country_name is None:
             errors["country"] = "Choose a destination country from the list."
