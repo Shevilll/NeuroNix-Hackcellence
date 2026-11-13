@@ -709,6 +709,84 @@ a.btn {
   fill: var(--blue-100);
 }
 
+/* ---------- Photo credits page ---------- */
+.credits {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.credits__intro {
+  margin: 0;
+  max-width: 720px;
+}
+
+.credits__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credit {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.credit__thumb {
+  flex: none;
+  width: 72px;
+  height: 54px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--skeleton);
+}
+
+.credit__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.credit__name {
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.credit__by {
+  color: var(--text-muted);
+}
+
+.credit__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  min-width: 0;
+}
+
+.credit__links a {
+  overflow-wrap: anywhere;
+}
+
+.credit__license {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.site-footer__note a {
+  font-weight: 600;
+}
+
 /* ---------- Tablets: summary and rules side by side ---------- */
 @media (min-width: 640px) and (max-width: 959px) {
   .pkg .pkg__aside {

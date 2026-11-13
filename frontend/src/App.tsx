@@ -2,6 +2,7 @@ import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
 import Icon from "./components/Icon";
 import Logo from "./components/Logo";
 import CheckPage from "./pages/CheckPage";
+import CreditsPage from "./pages/CreditsPage";
 import PlannerPage from "./pages/PlannerPage";
 import ReservationPage from "./pages/ReservationPage";
 
@@ -34,6 +35,7 @@ function Shell() {
         <Route path="/r" element={<ReservationPage />} />
         <Route path="/r/:number" element={<ReservationPage />} />
         <Route path="/check" element={<CheckPage />} />
+        <Route path="/credits" element={<CreditsPage />} />
         <Route path="*" element={<PlannerPage />} />
       </Routes>
       <footer className="site-footer">
@@ -42,7 +44,8 @@ function Shell() {
             <Logo size={24} /> Build My Holiday
           </span>
           <span className="site-footer__note">
-            Prices in Indian rupees for everyone travelling. Photos from Wikimedia Commons under free licences.
+            Prices in Indian rupees for everyone travelling. Photos from Wikimedia Commons under free licences:{" "}
+            <NavLink to="/credits">Photo credits</NavLink>
           </span>
         </div>
       </footer>

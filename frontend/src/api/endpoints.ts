@@ -193,3 +193,18 @@ export async function checkTrip(trip: unknown) {
 export async function getImages() {
   return (await api.request<Record<string, string>>("/api/images")).data;
 }
+
+/** One row of images/ATTRIBUTIONS.md: who made a photo and under which licence. */
+export interface PhotoCredit {
+  file: string;
+  used_for: string;
+  source_title: string;
+  source_url: string;
+  author: string;
+  license: string;
+  license_url: string;
+}
+
+export async function getCredits() {
+  return (await api.request<PhotoCredit[]>("/api/credits")).data;
+}
