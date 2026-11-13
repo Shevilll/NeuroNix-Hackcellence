@@ -7,11 +7,25 @@ front, so two concurrent writers queue instead of failing half-way through.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+
+_REFERENCES_LEGACY = re.compile(r'REFERENCES\s+"?\w+_legacy"?')
+
+
+def _free_name(tables: dict[str, str], table: str) -> str:
+    """``<table>_legacy``, or ``<table>_legacy2`` and so on if that name is already taken."""
+    name, n = f"{table}_legacy", 1
+    while name in tables:
+        n += 1
+        name = f"{table}_legacy{n}"
+    tables[name] = ""
+    return name
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS packages (
@@ -81,9 +95,37 @@ class Database:
     def migrate(self) -> None:
         conn = self._connect()
         try:
+            self._set_aside_legacy_tables(conn)
             conn.executescript(SCHEMA)
         finally:
             conn.close()
+
+    @staticmethod
+    def _set_aside_legacy_tables(conn: sqlite3.Connection) -> None:
+        """An early development build stored packages as ``packages(id, body)``. Rename its tables
+        to ``*_legacy`` so the current schema can be created beside them. Nothing is deleted.
+
+        SQLite rewrites the ``REFERENCES`` clauses of other tables when a parent table is renamed,
+        which would leave ``package_versions`` pointing at ``packages_legacy``. Both pragmas below
+        switch that off for the duration of the rename, and any table that an earlier run already
+        left pointing at a legacy table is set aside too, so the schema can recreate it.
+        """
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("PRAGMA legacy_alter_table=ON")
+        try:
+            tables = {row[0]: row[1] or "" for row in
+                      conn.execute("SELECT name, sql FROM sqlite_master WHERE type='table'")}
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(packages)")}
+            if columns and "package_id" not in columns:
+                for table in ("packages", "reservations", "idempotency"):
+                    if table in tables:
+                        conn.execute(f'ALTER TABLE "{table}" RENAME TO "{_free_name(tables, table)}"')
+            for name, sql in list(tables.items()):
+                if not name.endswith("_legacy") and _REFERENCES_LEGACY.search(sql):
+                    conn.execute(f'ALTER TABLE "{name}" RENAME TO "{_free_name(tables, name)}"')
+        finally:
+            conn.execute("PRAGMA legacy_alter_table=OFF")
+            conn.execute("PRAGMA foreign_keys=ON")
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
