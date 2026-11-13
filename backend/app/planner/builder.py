@@ -302,49 +302,45 @@ def _build_plan(request, catalog, order, split, objective="cheapest"):
 # ------------------------------------------------------------------ public
 
 
-def _reasons(request, catalog) -> list[dict[str, str]]:
-    names = next(c for c in catalog.countries.values() if c.name == request.country).city_names
-    airports = set().union(*(catalog.airports_serving(c) for c in names))
-    out = []
-    arrivals = catalog.arrival_flights(request.origin, airports, request.start_date)
-    returns = catalog.return_flights(airports, request.origin, request.end_date)
-    if not arrivals:
-        out.append({"code": "NO_ARRIVAL_FLIGHT", "message": f"No flight from {request.origin} lands in {request.country} on {request.start_date:%d %b %Y}."})
-    elif all(f.seats_left < request.travelers for f in arrivals):
-        out.append({"code": "NOT_ENOUGH_SEATS", "message": f"No arrival flight has {request.travelers} free seats on {request.start_date:%d %b %Y}."})
-    if not returns:
-        out.append({"code": "NO_RETURN_FLIGHT", "message": f"No flight from {request.country} to {request.origin} leaves on {request.end_date:%d %b %Y}."})
-    elif all(f.seats_left < request.travelers for f in returns):
-        out.append({"code": "NOT_ENOUGH_SEATS", "message": f"No return flight has {request.travelers} free seats on {request.end_date:%d %b %Y}."})
-    if not out:
-        out.append({"code": "NO_VALID_COMBINATION", "message": "Flights exist, but no combination of hotel rooms, airport transfer times and attractions fits these dates and travelers."})
-    return out
-
-
 def build_for_plan(request: TripRequest, catalog: Catalog, order, split, objective: str = "cheapest"):
     """The package for one chosen city plan (G3), or None when that plan cannot be built."""
     return _build_plan(request, catalog, tuple(order), tuple(split), objective)
 
 
-def build_package(request: TripRequest, catalog: Catalog) -> dict[str, Any]:
+def build_package(request: TripRequest, catalog: Catalog, explain: bool = True) -> dict[str, Any]:
+    """Build the recommended package and the cheapest / fastest / best-rated alternatives.
+
+    ``explain=False`` is the quick mode used to test variants of a request (diagnostics): only the
+    cheapest objective is solved and no reasons, suggestions or alternatives are added.
+    """
+    from app.planner import diagnostics  # imported here: diagnostics itself calls build_package
+
     plans = list(city_plans(request, catalog))
     by_objective: dict[str, list[dict[str, Any]]] = {}
-    for objective in ("cheapest", "fastest", "best_rated"):
+    for objective in (("cheapest", "fastest", "best_rated") if explain else ("cheapest",)):
         found = (_build_plan(request, catalog, order, split, objective) for order, split in plans)
         by_objective[objective] = [p for p in found if p]
     candidates = by_objective["cheapest"]
     if not candidates:
-        return {"status": "NO_PACKAGE", "reasons": _reasons(request, catalog)}
+        result: dict[str, Any] = {"status": "NO_PACKAGE"}
+        if explain:
+            result["reasons"] = diagnostics.explain_no_package(request, catalog)
+            result["nearby"] = diagnostics.nearby_options(request, catalog)
+        return result
     within = [p for p in candidates if p["total_inr"] <= request.budget]
     if not within:
         cheapest = min(candidates, key=lambda p: p["total_inr"])
         short = cheapest["total_inr"] - request.budget
-        return {
-            "status": "OVER_BUDGET", "cheapest_total": cheapest["total_inr"], "budget": request.budget,
-            "short_by": short, "cheapest_package": cheapest,
-            "suggestions": [f"Raise the budget by about ₹{short:,.0f}, or try fewer nights or other dates."],
-        }
+        result = {"status": "OVER_BUDGET", "cheapest_total": cheapest["total_inr"], "budget": request.budget,
+                  "short_by": short, "cheapest_package": cheapest}
+        if explain:
+            details = diagnostics.suggest_for_over_budget(request, catalog, cheapest["total_inr"])
+            result["suggestions"] = [d["message"] for d in details]
+            result["suggestion_details"] = details
+        return result
     best = min(within, key=lambda p: (-len(p["cities"]), p["total_inr"]))
+    if not explain:
+        return {"status": "OK", "package": best}
     alternatives = {}
     for objective, found in by_objective.items():
         ok = [p for p in found if p["total_inr"] <= request.budget]
