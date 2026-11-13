@@ -7,7 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from app.changes.operations import ChangeRefused, apply_change, change_report, list_city_plans, list_options
 from app.domain.request import RequestInvalid, parse_request
 from app.rules.validate import validate_package
-from app.store.store import IdempotencyKeyReused, SoldOut
+from app.store.store import ChangeBlocked, IdempotencyKeyReused, SoldOut
 from app.planner.builder import build_package
 
 router = APIRouter()
@@ -128,19 +128,25 @@ def city_plans_route(pid: str, request: Request) -> list:
 
 
 @router.post("/packages/{pid}/changes")
-def change(pid: str, payload: dict, request: Request) -> dict:
-    package = _package(request, pid)
-    store = request.app.state.store
-    expected = payload.get("expected_version", package.get("version", 1))
-    if expected != package.get("version", 1):
-        raise HTTPException(409, detail={"message": "The package changed in another tab.", "package": package})
+def change(pid: str, payload: dict, request: Request, response: Response,
+           idempotency_key: str | None = Header(default=None)) -> dict:
+    catalog = _catalog(request)  # read before the change transaction opens
     try:
-        updated = apply_change(package, _catalog(request), payload)
+        body, replayed = request.app.state.store.change_package(
+            pid, idempotency_key, payload,
+            apply=lambda package: apply_change(package, catalog, payload), report=change_report)
     except ChangeRefused as refusal:
         raise HTTPException(422, detail={"message": refusal.reason, "violations": refusal.violations}) from refusal
-    outcome = store.update_package(pid, updated, expected)
-    if outcome == "booked":
-        raise HTTPException(409, detail={"message": "This package is already booked."})
-    if outcome == "conflict":
-        raise HTTPException(409, detail={"message": "The package changed in another tab.", "package": store.get_package(pid)})
-    return {"package_id": pid, "package": store.get_package(pid), **change_report(package, updated)}
+    except IdempotencyKeyReused as error:
+        raise HTTPException(422, detail={"code": "IDEMPOTENCY_KEY_REUSED",
+                                         "message": "That Idempotency-Key was already used for a different request."}) from error
+    except ChangeBlocked as blocked:
+        if blocked.kind == "missing":
+            raise HTTPException(404, detail="not found") from blocked
+        if blocked.kind == "booked":
+            raise HTTPException(409, detail={"message": "This package is already booked."}) from blocked
+        raise HTTPException(409, detail={"message": "The package changed in another tab.",
+                                         "package": blocked.package}) from blocked
+    if replayed:
+        response.headers["Idempotent-Replay"] = "true"
+    return body

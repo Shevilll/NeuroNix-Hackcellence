@@ -14,14 +14,23 @@ from typing import Any
 
 from app.store.db import Database
 from app.store.idempotency import IdempotencyKeyReused, execute_once
-from app.store.packages import PackageRepo, VersionConflict
+from app.store.packages import PackageRepo
 from app.store.reservations import generate_unique_number
 
-__all__ = ["IdempotencyKeyReused", "SoldOut", "Store", "demand"]
+__all__ = ["ChangeBlocked", "IdempotencyKeyReused", "SoldOut", "Store", "demand"]
 
 
 class SoldOut(Exception):
     """The last seats or rooms of this package were booked by someone else."""
+
+
+class ChangeBlocked(Exception):
+    """A change cannot be applied: the package is 'missing', 'booked', or in 'conflict' (stale version)."""
+
+    def __init__(self, kind: str, package: dict[str, Any] | None = None) -> None:
+        super().__init__(kind)
+        self.kind = kind
+        self.package = package
 
 
 def demand(package: dict[str, Any]) -> tuple[dict[str, int], dict[tuple[str, str], int]]:
@@ -67,18 +76,34 @@ class Store:
         stored = self.packages.get(pid)
         return _public(stored) if stored else None
 
-    def update_package(self, pid: str, package: dict[str, Any], expected_version: int) -> str:
-        """Optimistic update: 'ok', 'conflict' (stale version), 'booked' or 'missing'."""
-        current = self.packages.get(pid)
-        if current is None:
-            return "missing"
-        if current.status == "BOOKED":
-            return "booked"
-        try:
-            self.packages.update(pid, expected_version, package)
-        except VersionConflict:
-            return "conflict"
-        return "ok"
+    def change_package(self, pid: str, key: str | None, body: dict[str, Any], apply, report) -> tuple[dict[str, Any], bool]:
+        """Apply one change as a single transaction. Returns (answer, replayed).
+
+        ``apply(package)`` gives the changed package (or raises to refuse); ``report(before, after)``
+        gives the extra answer fields. With a key, the answer is stored in the same transaction as
+        the new version, so a retry after a lost response gets that answer back instead of a
+        version conflict. Keys are scoped to the package. Raises ``ChangeBlocked`` and
+        ``IdempotencyKeyReused``; when anything raises, nothing is stored.
+        """
+
+        def change(conn):
+            stored = self.packages.get(pid, conn=conn)
+            if stored is None:
+                raise ChangeBlocked("missing")
+            current = _public(stored)
+            if stored.status == "BOOKED":
+                raise ChangeBlocked("booked", current)
+            if body.get("expected_version", stored.version) != stored.version:
+                raise ChangeBlocked("conflict", current)
+            updated = apply(current)
+            saved = self.packages.update(pid, stored.version, updated, conn=conn)
+            return 200, {"package_id": pid, "package": _public(saved), **report(current, updated)}
+
+        if key is None:
+            with self.db.transaction() as conn:
+                return change(conn)[1], False
+        result = execute_once(self.db, scope=f"change:{pid}", key=key, body=body, action=change)
+        return result.body, result.replayed
 
     # ----- S2 inventory
     def flight_holds(self) -> dict[str, int]:

@@ -87,8 +87,12 @@ class PackageRepo:
         with self.db.transaction() as c:
             return read(c)
 
-    def update(self, package_id: str, expected_version: int, package: dict[str, Any]) -> StoredPackage:
-        with self.db.transaction() as c:
+    def update(
+        self, package_id: str, expected_version: int, package: dict[str, Any], conn=None
+    ) -> StoredPackage:
+        """Write the next version. Pass ``conn`` to take part in an open transaction."""
+
+        def write(c) -> StoredPackage:
             current = self.get(package_id, conn=c)
             if current is None:
                 raise KeyError(package_id)
@@ -105,6 +109,11 @@ class PackageRepo:
                 (package_id, version, json.dumps(package), now),
             )
             return StoredPackage(package_id, version, current.status, current.request, package)
+
+        if conn is not None:
+            return write(conn)
+        with self.db.transaction() as c:
+            return write(c)
 
     def set_status(self, package_id: str, status: str, conn=None) -> None:
         def write(c) -> None:
