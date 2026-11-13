@@ -22,6 +22,9 @@
   --border-strong: #8c8c8c;
   --skeleton: #eef1f5;
   --skeleton-shine: #f8f9fb;
+  /* Light wash over the backdrop photo collage so cards and text stay readable. */
+  --backdrop-wash: rgba(245, 249, 255, 0.25);
+  --backdrop-wash-strong: rgba(245, 249, 255, 0.5);
 
   /* Status (rule checks, errors) */
   --ok: #008234;

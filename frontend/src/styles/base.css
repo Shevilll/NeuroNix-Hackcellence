@@ -4,6 +4,12 @@
   box-sizing: border-box;
 }
 
+/* No rubber-band bounce: it would pull the page away and show the backdrop above the header. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);

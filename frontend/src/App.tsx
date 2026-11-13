@@ -14,6 +14,7 @@ function Shell() {
   const { t } = useI18n();
   return (
     <div className="app">
+      <div className="backdrop" aria-hidden="true" />
       <header className="app-header">
         <div className="app-header__inner">
           <NavLink to="/" className="brand" end>

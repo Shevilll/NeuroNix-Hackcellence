@@ -92,6 +92,17 @@
   max-width: 620px;
 }
 
+/* ---------- Site backdrop: a softened collage of catalog photos behind every page ---------- */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, var(--backdrop-wash) 0%, var(--backdrop-wash) 55%, var(--backdrop-wash-strong) 100%),
+    url("/backdrop-collage.jpg") center / cover no-repeat;
+}
+
 /* ---------- Page column ---------- */
 .page {
   position: relative;
